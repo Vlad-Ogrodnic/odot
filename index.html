@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Tasks">
+  <meta name="theme-color" content="#007AFF">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <title>Tasks</title>
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    :root {
+      --accent:        #007AFF;
+      --accent-light:  #E5F0FF;
+      --bg:            #F2F2F7;
+      --card:          #FFFFFF;
+      --text:          #1C1C1E;
+      --text-secondary:#8E8E93;
+      --separator:     #E5E5EA;
+      --danger:        #FF3B30;
+      --success:       #34C759;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --accent-light:  #1A2E4A;
+        --bg:            #000000;
+        --card:          #1C1C1E;
+        --text:          #FFFFFF;
+        --text-secondary:#8E8E93;
+        --separator:     #38383A;
+      }
+    }
+
+    html, body {
+      height: 100%;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      /* Respect iPhone notch and home indicator */
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
+      padding-left: env(safe-area-inset-left);
+      padding-right: env(safe-area-inset-right);
+    }
+
+    /* ── Header ──────────────────────────────────────── */
+    .header {
+      background: var(--card);
+      padding: 16px 20px 12px;
+      border-bottom: 1px solid var(--separator);
+      position: sticky;
+      top: 0;
+      z-index: 20;
+    }
+
+    .header-top {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+    }
+
+    .header h1 {
+      font-size: 32px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      line-height: 1;
+    }
+
+    .clear-btn {
+      background: none;
+      border: none;
+      color: var(--danger);
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      padding: 4px 0;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s;
+    }
+
+    .clear-btn.visible {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .task-count {
+      font-size: 14px;
+      color: var(--text-secondary);
+      margin-top: 4px;
+    }
+
+    /* ── Input ───────────────────────────────────────── */
+    .input-area {
+      padding: 12px 16px;
+      background: var(--card);
+      border-bottom: 1px solid var(--separator);
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .input-area input {
+      flex: 1;
+      border: 1.5px solid var(--separator);
+      background: var(--bg);
+      border-radius: 10px;
+      padding: 11px 14px;
+      font-size: 16px;
+      color: var(--text);
+      outline: none;
+      transition: border-color 0.15s;
+      -webkit-appearance: none;
+    }
+
+    .input-area input:focus {
+      border-color: var(--accent);
+    }
+
+    .input-area input::placeholder {
+      color: var(--text-secondary);
+    }
+
+    .add-btn {
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      padding: 11px 18px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: opacity 0.15s, transform 0.1s;
+      -webkit-appearance: none;
+    }
+
+    .add-btn:active {
+      opacity: 0.8;
+      transform: scale(0.97);
+    }
+
+    /* ── Filter tabs ─────────────────────────────────── */
+    .filter-bar {
+      display: flex;
+      padding: 10px 16px;
+      gap: 8px;
+    }
+
+    .filter-btn {
+      padding: 6px 16px;
+      border-radius: 20px;
+      border: 1.5px solid var(--separator);
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      background: var(--card);
+      color: var(--text-secondary);
+      transition: all 0.15s;
+      -webkit-appearance: none;
+    }
+
+    .filter-btn.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: white;
+    }
+
+    /* ── Task list ───────────────────────────────────── */
+    .task-list {
+      padding: 0 16px 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .task-item {
+      background: var(--card);
+      border-radius: 14px;
+      padding: 14px 14px 14px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.07);
+      /* Slide in animation */
+      animation: slideIn 0.2s ease;
+    }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(-6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Circular checkbox */
+    .check-circle {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      border: 2px solid var(--separator);
+      cursor: pointer;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s, border-color 0.15s;
+      user-select: none;
+    }
+
+    .check-circle.done {
+      background: var(--success);
+      border-color: var(--success);
+    }
+
+    .check-circle .checkmark {
+      display: none;
+      color: white;
+      font-size: 14px;
+      font-weight: 700;
+      line-height: 1;
+      margin-top: 1px;
+    }
+
+    .check-circle.done .checkmark {
+      display: block;
+    }
+
+    /* Task text */
+    .task-text {
+      flex: 1;
+      font-size: 16px;
+      line-height: 1.4;
+      word-break: break-word;
+      transition: color 0.15s;
+    }
+
+    .task-text.done {
+      text-decoration: line-through;
+      color: var(--text-secondary);
+    }
+
+    /* Delete button */
+    .delete-btn {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: none;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-secondary);
+      font-size: 16px;
+      flex-shrink: 0;
+      opacity: 0.5;
+      transition: opacity 0.15s, background 0.15s, color 0.15s;
+    }
+
+    .delete-btn:hover,
+    .delete-btn:active {
+      opacity: 1;
+      background: rgba(255, 59, 48, 0.12);
+      color: var(--danger);
+    }
+
+    /* ── Empty state ─────────────────────────────────── */
+    .empty-state {
+      text-align: center;
+      padding: 64px 24px 32px;
+      color: var(--text-secondary);
+    }
+
+    .empty-icon {
+      font-size: 52px;
+      display: block;
+      margin-bottom: 14px;
+      line-height: 1;
+    }
+
+    .empty-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+
+    .empty-sub {
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    /* ── Offline banner ──────────────────────────────── */
+    .offline-banner {
+      display: none;
+      background: #FF9500;
+      color: white;
+      text-align: center;
+      padding: 6px 16px;
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .offline-banner.visible {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="offline-banner" id="offlineBanner">You're offline — all changes are saved locally</div>
+
+  <div class="header">
+    <div class="header-top">
+      <h1>Tasks</h1>
+      <button class="clear-btn" id="clearDoneBtn" onclick="clearCompleted()">Clear done</button>
+    </div>
+    <div class="task-count" id="taskCount">No tasks yet</div>
+  </div>
+
+  <div class="input-area">
+    <input
+      type="text"
+      id="taskInput"
+      placeholder="What needs to be done?"
+      maxlength="300"
+      autocomplete="off"
+      autocorrect="on"
+      spellcheck="true"
+    >
+    <button class="add-btn" id="addBtn" onclick="addTask()">Add</button>
+  </div>
+
+  <div class="filter-bar">
+    <button class="filter-btn active" data-filter="all"   onclick="setFilter('all',   this)">All</button>
+    <button class="filter-btn"        data-filter="active" onclick="setFilter('active', this)">Active</button>
+    <button class="filter-btn"        data-filter="done"   onclick="setFilter('done',   this)">Done</button>
+  </div>
+
+  <div class="task-list" id="taskList"></div>
+
+<script>
+  // ── State ──────────────────────────────────────────────────────────────
+  let tasks  = [];
+  let filter = 'all';
+
+  const STORAGE_KEY = 'todo_tasks_v1';
+
+  // ── Persistence ────────────────────────────────────────────────────────
+  function load() {
+    try {
+      tasks = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+    } catch {
+      tasks = [];
+    }
+  }
+
+  function save() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+    } catch (e) {
+      console.warn('Storage write failed:', e);
+    }
+  }
+
+  // ── Task operations ────────────────────────────────────────────────────
+  function addTask() {
+    const input = document.getElementById('taskInput');
+    const text  = input.value.trim();
+    if (!text) {
+      input.focus();
+      return;
+    }
+
+    tasks.unshift({
+      id:        Date.now(),
+      text,
+      done:      false,
+      createdAt: new Date().toISOString(),
+    });
+
+    save();
+    input.value = '';
+    input.focus();
+    render();
+  }
+
+  function toggleTask(id) {
+    const task = tasks.find(t => t.id === id);
+    if (!task) return;
+    task.done = !task.done;
+    save();
+    render();
+  }
+
+  function deleteTask(id) {
+    tasks = tasks.filter(t => t.id !== id);
+    save();
+    render();
+  }
+
+  function clearCompleted() {
+    tasks = tasks.filter(t => !t.done);
+    save();
+    render();
+  }
+
+  // ── Filter ─────────────────────────────────────────────────────────────
+  function setFilter(f, btn) {
+    filter = f;
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    render();
+  }
+
+  // ── Render ─────────────────────────────────────────────────────────────
+  function render() {
+    const listEl      = document.getElementById('taskList');
+    const countEl     = document.getElementById('taskCount');
+    const clearBtn    = document.getElementById('clearDoneBtn');
+
+    const total    = tasks.length;
+    const doneCount   = tasks.filter(t => t.done).length;
+    const activeCount = total - doneCount;
+
+    // Update count label
+    if (total === 0) {
+      countEl.textContent = 'No tasks yet';
+    } else {
+      countEl.textContent = `${activeCount} remaining · ${doneCount} done`;
+    }
+
+    // Show/hide "Clear done" button
+    clearBtn.classList.toggle('visible', doneCount > 0);
+
+    // Filter tasks
+    const visible = tasks.filter(t => {
+      if (filter === 'active') return !t.done;
+      if (filter === 'done')   return  t.done;
+      return true;
+    });
+
+    // Empty state
+    if (visible.length === 0) {
+      const msgs = {
+        all:    { icon: '📝', title: 'Nothing here yet',     sub: 'Type a task above and tap Add' },
+        active: { icon: '✅', title: 'All caught up!',       sub: 'No active tasks remaining'     },
+        done:   { icon: '🎯', title: 'Nothing completed yet', sub: 'Finish a task to see it here'  },
+      };
+      const m = msgs[filter];
+      listEl.innerHTML = `
+        <div class="empty-state">
+          <span class="empty-icon">${m.icon}</span>
+          <div class="empty-title">${m.title}</div>
+          <div class="empty-sub">${m.sub}</div>
+        </div>`;
+      return;
+    }
+
+    // Task items
+    listEl.innerHTML = visible.map(task => `
+      <div class="task-item" id="task-${task.id}">
+        <div class="check-circle ${task.done ? 'done' : ''}"
+             onclick="toggleTask(${task.id})"
+             role="checkbox"
+             aria-checked="${task.done}"
+             aria-label="Mark complete">
+          <span class="checkmark">✓</span>
+        </div>
+        <div class="task-text ${task.done ? 'done' : ''}">${escHtml(task.text)}</div>
+        <button class="delete-btn"
+                onclick="deleteTask(${task.id})"
+                aria-label="Delete task">✕</button>
+      </div>
+    `).join('');
+  }
+
+  // ── Helpers ────────────────────────────────────────────────────────────
+  function escHtml(str) {
+    const d = document.createElement('div');
+    d.appendChild(document.createTextNode(str));
+    return d.innerHTML;
+  }
+
+  // ── Keyboard ───────────────────────────────────────────────────────────
+  document.getElementById('taskInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') addTask();
+  });
+
+  // ── Offline detection ─────────────────────────────────────────────────
+  function updateOnlineStatus() {
+    document.getElementById('offlineBanner')
+      .classList.toggle('visible', !navigator.onLine);
+  }
+  window.addEventListener('online',  updateOnlineStatus);
+  window.addEventListener('offline', updateOnlineStatus);
+  updateOnlineStatus();
+
+  // ── Service Worker ────────────────────────────────────────────────────
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js')
+        .then(reg  => console.log('SW registered:', reg.scope))
+        .catch(err => console.warn('SW registration failed:', err));
+    });
+  }
+
+  // ── Boot ───────────────────────────────────────────────────────────────
+  load();
+  render();
+</script>
+</body>
+</html>
