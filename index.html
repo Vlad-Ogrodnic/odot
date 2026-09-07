@@ -6,7 +6,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Tasks">
-  <meta name="theme-color" content="#007AFF">
+  <meta name="theme-color" content="#C1666B">
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icon.svg">
   <title>Tasks</title>
@@ -19,25 +19,46 @@
     }
 
     :root {
-      --accent:        #007AFF;
-      --accent-light:  #E5F0FF;
-      --bg:            #F2F2F7;
-      --card:          #FFFFFF;
-      --text:          #1C1C1E;
-      --text-secondary:#8E8E93;
-      --separator:     #E5E5EA;
-      --danger:        #FF3B30;
-      --success:       #34C759;
+      --bg:            #F5F1EA;
+      --track:         #ECE7DD;
+      --sheet:         #FFFFFF;
+      --text:          #221F1B;
+      --text-dim:      #8C8478;
+      --text-dimmer:   #B8B0A2;
+      --sep:           rgba(34, 31, 26, 0.12);
+      --accent:        #C1666B;
+      --accent-text:   #FBF3EF;
+      --done:          #4FA05A;
+      --danger:        #C0392B;
+      --warning:       #B8863B;
+      /* Auto-assigned category colors (see catColorVar in the script) — a
+         fixed palette rather than a color picker, so identity is automatic. */
+      --cat-0:         #4C6899;
+      --cat-1:         #A87A22;
+      --cat-2:         #3D7A73;
+      --cat-3:         #6B5596;
+      --cat-4:         #9C6640;
+      --cat-5:         #66803F;
     }
 
     @media (prefers-color-scheme: dark) {
       :root {
-        --accent-light:  #1A2E4A;
-        --bg:            #000000;
-        --card:          #1C1C1E;
-        --text:          #FFFFFF;
-        --text-secondary:#8E8E93;
-        --separator:     #38383A;
+        --bg:          #171512;
+        --track:       #221F1B;
+        --sheet:       #201C18;
+        --text:        #F2EFE9;
+        --text-dim:    #8C867C;
+        --text-dimmer: #5C574E;
+        --sep:         rgba(242, 239, 233, 0.09);
+        --done:        #6FBF73;
+        --danger:      #E05D51;
+        --warning:     #E0A94D;
+        --cat-0:       #7B93B8;
+        --cat-1:       #D2A24C;
+        --cat-2:       #5C9A93;
+        --cat-3:       #9B87C4;
+        --cat-4:       #C98F6B;
+        --cat-5:       #93A87C;
       }
     }
 
@@ -58,9 +79,9 @@
 
     /* ── Header ──────────────────────────────────────── */
     .header {
-      background: var(--card);
-      padding: 16px 20px 12px;
-      border-bottom: 1px solid var(--separator);
+      background: var(--bg);
+      padding: 18px 20px 14px;
+      border-bottom: 1px solid var(--sep);
       position: sticky;
       top: 0;
       z-index: 20;
@@ -73,16 +94,89 @@
     }
 
     .task-count {
-      font-size: 14px;
-      color: var(--text-secondary);
+      font-size: 13.5px;
+      color: var(--text-dim);
       margin-top: 4px;
+    }
+
+    .settings-btn {
+      background: none;
+      border: none;
+      color: var(--text-dim);
+      font-size: 22px;
+      line-height: 1;
+      padding: 6px;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    /* ── Settings sheet ──────────────────────────────── */
+    .settings-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 30;
+      align-items: flex-end;
+    }
+
+    .settings-overlay.visible {
+      display: flex;
+    }
+
+    .settings-sheet {
+      background: var(--sheet);
+      width: 100%;
+      border-radius: 20px 20px 0 0;
+      padding: 18px 20px calc(20px + env(safe-area-inset-bottom));
+      animation: slideUp 0.2s ease;
+    }
+
+    @keyframes slideUp {
+      from { transform: translateY(100%); }
+      to   { transform: translateY(0); }
+    }
+
+    .settings-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    .settings-header h2 {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+
+    .settings-close {
+      background: none;
+      border: none;
+      color: var(--text-dim);
+      font-size: 18px;
+      padding: 6px;
+      cursor: pointer;
+    }
+
+    .settings-action {
+      display: block;
+      width: 100%;
+      text-align: left;
+      background: none;
+      border: none;
+      border-top: 1px solid var(--sep);
+      color: var(--accent);
+      font-size: 16px;
+      font-weight: 600;
+      padding: 16px 4px;
+      cursor: pointer;
+      -webkit-appearance: none;
     }
 
     /* ── Input ───────────────────────────────────────── */
     .input-area {
-      padding: 12px 16px;
-      background: var(--card);
-      border-bottom: 1px solid var(--separator);
+      padding: 14px 16px;
       display: flex;
       gap: 10px;
       align-items: center;
@@ -90,10 +184,10 @@
 
     .input-area input {
       flex: 1;
-      border: 1.5px solid var(--separator);
-      background: var(--bg);
-      border-radius: 10px;
-      padding: 11px 14px;
+      border: 1.5px solid var(--sep);
+      background: var(--track);
+      border-radius: 12px;
+      padding: 12px 14px;
       font-size: 16px;
       color: var(--text);
       outline: none;
@@ -106,17 +200,17 @@
     }
 
     .input-area input::placeholder {
-      color: var(--text-secondary);
+      color: var(--text-dim);
     }
 
     .add-btn {
       background: var(--accent);
-      color: white;
+      color: var(--accent-text);
       border: none;
-      border-radius: 10px;
-      padding: 11px 18px;
+      border-radius: 12px;
+      padding: 12px 20px;
       font-size: 15px;
-      font-weight: 600;
+      font-weight: 700;
       cursor: pointer;
       white-space: nowrap;
       transition: opacity 0.15s, transform 0.1s;
@@ -128,49 +222,37 @@
       transform: scale(0.97);
     }
 
-    /* ── Filter tabs ─────────────────────────────────── */
+    /* ── Status: segmented control ─────────────────────── */
     .filter-bar {
-      display: flex;
-      flex-wrap: wrap;
-      padding: 10px 16px;
-      gap: 8px;
+      padding: 4px 16px 14px;
     }
 
-    /* ── Export / Import ─────────────────────────────── */
-    .io-actions {
+    .segmented {
       display: flex;
-      gap: 14px;
-      align-items: center;
-      margin-left: auto;
-    }
-
-    .io-btn {
-      background: none;
-      border: none;
-      color: var(--accent);
-      font-size: 14px;
-      font-weight: 500;
-      cursor: pointer;
-      padding: 6px 0;
+      gap: 4px;
+      background: var(--track);
+      border-radius: 14px;
+      padding: 4px;
     }
 
     .filter-btn {
-      padding: 6px 16px;
-      border-radius: 20px;
-      border: 1.5px solid var(--separator);
-      font-size: 14px;
-      font-weight: 500;
+      flex: 1;
+      text-align: center;
+      padding: 11px 0;
+      border-radius: 10px;
+      border: none;
+      font-size: 17px;
+      font-weight: 600;
       cursor: pointer;
-      background: var(--card);
-      color: var(--text-secondary);
-      transition: all 0.15s;
+      background: transparent;
+      color: var(--text-dim);
       -webkit-appearance: none;
     }
 
     .filter-btn.active {
       background: var(--accent);
-      border-color: var(--accent);
-      color: white;
+      color: var(--accent-text);
+      font-weight: 700;
     }
 
     /* ── Done time-window (shown only while the Done tab is active) ──── */
@@ -178,33 +260,30 @@
       display: flex;
       flex-wrap: wrap;
       gap: 6px;
-      padding: 0 16px 10px;
+      padding: 0 16px 14px;
     }
 
     .window-btn {
-      padding: 4px 12px;
+      padding: 5px 13px;
       border-radius: 14px;
-      border: 1px solid var(--separator);
-      font-size: 12px;
-      font-weight: 500;
+      border: 1px solid var(--sep);
+      font-size: 12.5px;
+      font-weight: 600;
       cursor: pointer;
-      background: var(--card);
-      color: var(--text-secondary);
+      background: transparent;
+      color: var(--text-dim);
       -webkit-appearance: none;
     }
 
     .window-btn.active {
-      background: var(--accent-light);
+      background: var(--track);
       border-color: var(--accent);
       color: var(--accent);
     }
 
     /* ── Categories (nested) ─────────────────────────── */
     .category-bar {
-      padding: 0 16px 10px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
+      padding: 0 16px 16px;
     }
 
     /* Title area: plain "Tasks" at root, or a back/name/options row inside a category */
@@ -215,10 +294,14 @@
       min-width: 0;
     }
 
-    .title-group h1 {
-      font-size: 32px;
+    /* A plain type selector here (".title-group h1") would outrank
+       .category-title's single-class specificity regardless of source
+       order, silently overriding its font-size — so the root heading gets
+       its own class instead of relying on the bare element. */
+    .app-title {
+      font-size: 30px;
       font-weight: 700;
-      letter-spacing: -0.5px;
+      letter-spacing: -0.02em;
       line-height: 1;
     }
 
@@ -235,9 +318,9 @@
     }
 
     .category-title {
-      font-size: 24px;
+      font-size: 26px;
       font-weight: 700;
-      letter-spacing: -0.3px;
+      letter-spacing: -0.02em;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -247,7 +330,7 @@
     .more-btn {
       background: none;
       border: none;
-      color: var(--text-secondary);
+      color: var(--text-dim);
       font-size: 20px;
       line-height: 1;
       padding: 8px;
@@ -255,22 +338,47 @@
       flex-shrink: 0;
     }
 
+    /* Plain colored text, no chip/bubble — each category keeps its own hue
+       everywhere it appears. These are pure navigation (drill into a child),
+       never a "selected filter", so none of them ever gets an active state. */
     .category-chips {
       display: flex;
       flex-wrap: wrap;
-      gap: 8px;
+      align-items: center;
+      gap: 14px;
+      font-size: 15px;
+      font-weight: 700;
+    }
+
+    .cat-chip {
+      background: none;
+      border: none;
+      padding: 4px 0;
+      font: inherit;
+      cursor: pointer;
+    }
+
+    .add-cat-btn {
+      background: none;
+      border: none;
+      padding: 4px 0;
+      font-size: 20px;
+      line-height: 1;
+      color: var(--text-dimmer);
+      cursor: pointer;
     }
 
     .category-add-input {
-      padding: 6px 14px;
-      border-radius: 20px;
-      border: 1.5px solid var(--accent);
-      font-size: 14px;
+      border: none;
+      border-bottom: 1.5px solid var(--accent);
+      font-size: 16px; /* iOS Safari auto-zooms the page on focus for inputs under 16px */
       font-family: inherit;
-      background: var(--card);
+      font-weight: 600;
+      background: transparent;
       color: var(--text);
       outline: none;
       min-width: 120px;
+      padding: 0 0 2px;
       -webkit-appearance: none;
     }
 
@@ -278,11 +386,10 @@
     .category-label {
       flex-shrink: 0;
       max-width: 90px;
-      font-size: 12px;
-      color: var(--text-secondary);
-      background: var(--bg);
-      border-radius: 8px;
-      padding: 3px 8px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -295,25 +402,24 @@
     }
 
     /* ── Task list ───────────────────────────────────── */
+    /* Flat, continuous list with hairline dividers — no per-row card/shadow.
+       That's this design's whole point: shape (cards, pills) is reserved for
+       actual controls (the segmented control, the settings sheet), not spent
+       on every repeated block. */
     .task-list {
       padding: 0 16px 32px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
     }
 
-    /* Outer wrapper: clips the swipe-to-delete reveal to the rounded corners
-       and is what gets translated up/down during drag-to-reorder. */
+    /* Outer wrapper: clips the swipe-to-delete reveal and is what gets
+       translated up/down during drag-to-reorder. */
     .task-item-wrapper {
       position: relative;
       overflow: hidden;
-      border-radius: 14px;
-      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.07);
       animation: slideIn 0.2s ease;
     }
 
     .task-item-wrapper.dragging {
-      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
       z-index: 5;
     }
 
@@ -331,7 +437,6 @@
       align-items: center;
       justify-content: flex-end;
       padding-right: 22px;
-      border-radius: 14px;
       cursor: pointer;
     }
 
@@ -341,39 +446,28 @@
       line-height: 1;
     }
 
-    /* The visible white row that slides on top of .delete-reveal */
+    /* The row that slides on top of .delete-reveal */
     .task-row {
       position: relative;
       z-index: 1;
-      background: var(--card);
-      border-radius: 14px;
-      padding: 14px 14px 14px 16px;
+      background: var(--bg);
+      padding: 15px 0;
+      border-bottom: 1px solid var(--sep);
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 13px;
       touch-action: pan-y;
     }
 
-    /* Drag handle for reordering (vertical drag) */
-    .drag-handle {
-      width: 26px;
-      height: 26px;
-      flex-shrink: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: var(--text-secondary);
-      font-size: 18px;
-      line-height: 1;
-      cursor: grab;
-      touch-action: none;
+    .task-item-wrapper:last-child .task-row {
+      border-bottom: none;
     }
 
     /* Inline edit input, replaces .task-text while editing */
     .edit-input {
       flex: 1;
       min-width: 0;
-      font-size: 16px;
+      font-size: 16.5px;
       line-height: 1.4;
       font-family: inherit;
       color: var(--text);
@@ -387,10 +481,10 @@
 
     /* Circular checkbox */
     .check-circle {
-      width: 26px;
-      height: 26px;
+      width: 23px;
+      height: 23px;
       border-radius: 50%;
-      border: 2px solid var(--separator);
+      border: 1.5px solid var(--text-dimmer);
       cursor: pointer;
       flex-shrink: 0;
       display: flex;
@@ -401,14 +495,14 @@
     }
 
     .check-circle.done {
-      background: var(--success);
-      border-color: var(--success);
+      background: var(--done);
+      border-color: var(--done);
     }
 
     .check-circle .checkmark {
       display: none;
-      color: white;
-      font-size: 14px;
+      color: var(--bg);
+      font-size: 13px;
       font-weight: 700;
       line-height: 1;
       margin-top: 1px;
@@ -421,7 +515,7 @@
     /* Task text */
     .task-text {
       flex: 1;
-      font-size: 16px;
+      font-size: 16.5px;
       line-height: 1.4;
       word-break: break-word;
       transition: color 0.15s;
@@ -429,14 +523,14 @@
 
     .task-text.done {
       text-decoration: line-through;
-      color: var(--text-secondary);
+      color: var(--text-dim);
     }
 
     /* ── Empty state ─────────────────────────────────── */
     .empty-state {
       text-align: center;
       padding: 64px 24px 32px;
-      color: var(--text-secondary);
+      color: var(--text-dim);
     }
 
     .empty-icon {
@@ -447,8 +541,8 @@
     }
 
     .empty-title {
-      font-size: 18px;
-      font-weight: 600;
+      font-size: 19px;
+      font-weight: 700;
       color: var(--text);
       margin-bottom: 6px;
     }
@@ -461,12 +555,12 @@
     /* ── Offline banner ──────────────────────────────── */
     .offline-banner {
       display: none;
-      background: #FF9500;
-      color: white;
+      background: var(--warning);
+      color: var(--bg);
       text-align: center;
       padding: 6px 16px;
       font-size: 13px;
-      font-weight: 500;
+      font-weight: 600;
     }
 
     .offline-banner.visible {
@@ -481,8 +575,23 @@
   <div class="header">
     <div class="header-top">
       <div class="title-group" id="titleGroup"></div>
+      <button class="settings-btn" onclick="openSettings()" aria-label="Settings">⚙</button>
     </div>
     <div class="task-count" id="taskCount">No tasks yet</div>
+  </div>
+
+  <div class="filter-bar">
+    <div class="segmented">
+      <button class="filter-btn active" data-filter="all"   onclick="setFilter('all',   this)">All</button>
+      <button class="filter-btn"        data-filter="active" onclick="setFilter('active', this)">Active</button>
+      <button class="filter-btn"        data-filter="done"   onclick="setFilter('done',   this)">Done</button>
+    </div>
+  </div>
+
+  <div id="doneWindowChips"></div>
+
+  <div class="category-bar">
+    <div class="category-chips" id="categoryChips"></div>
   </div>
 
   <div class="input-area">
@@ -498,24 +607,19 @@
     <button class="add-btn" id="addBtn" onclick="addTask()">Add</button>
   </div>
 
-  <div class="filter-bar">
-    <button class="filter-btn active" data-filter="all"   onclick="setFilter('all',   this)">All</button>
-    <button class="filter-btn"        data-filter="active" onclick="setFilter('active', this)">Active</button>
-    <button class="filter-btn"        data-filter="done"   onclick="setFilter('done',   this)">Done</button>
-    <div class="io-actions">
-      <button class="io-btn" onclick="exportTasks()">Export</button>
-      <button class="io-btn" onclick="document.getElementById('importFile').click()">Import</button>
+  <div class="task-list" id="taskList"></div>
+
+  <div class="settings-overlay" id="settingsOverlay" onclick="if(event.target===this) closeSettings()">
+    <div class="settings-sheet">
+      <div class="settings-header">
+        <h2>Settings</h2>
+        <button class="settings-close" onclick="closeSettings()" aria-label="Close">✕</button>
+      </div>
+      <button class="settings-action" onclick="exportTasks()">Export tasks</button>
+      <button class="settings-action" onclick="document.getElementById('importFile').click()">Import tasks</button>
       <input type="file" id="importFile" accept="application/json" style="display:none" onchange="handleImportFile(event)">
     </div>
   </div>
-
-  <div id="doneWindowChips"></div>
-
-  <div class="category-bar">
-    <div class="category-chips" id="categoryChips"></div>
-  </div>
-
-  <div class="task-list" id="taskList"></div>
 
 <script>
   // ── State ──────────────────────────────────────────────────────────────
@@ -670,6 +774,14 @@
     return result;
   }
 
+  // Auto-assigns each category a stable color from the fixed --cat-0..5
+  // palette, keyed off its id — no color picker needed, and a category's
+  // color never changes as others are added or removed.
+  const CATEGORY_HUES = 6;
+  function catColorVar(id) {
+    return `var(--cat-${id % CATEGORY_HUES})`;
+  }
+
   function navigateToCategory(id) {
     currentCategoryId = id;
     render();
@@ -766,6 +878,15 @@
     task.categoryId = categoryIdStr === '' ? null : Number(categoryIdStr);
     save();
     render();
+  }
+
+  // ── Settings sheet ─────────────────────────────────────────────────────
+  function openSettings() {
+    document.getElementById('settingsOverlay').classList.add('visible');
+  }
+
+  function closeSettings() {
+    document.getElementById('settingsOverlay').classList.remove('visible');
   }
 
   // ── Export / Import ────────────────────────────────────────────────────
@@ -1027,7 +1148,6 @@
             : `<div class="task-text ${task.done ? 'done' : ''}" onclick="startEdit(${task.id})">${escHtml(task.text)}</div>`
           }
           ${renderCategoryLabel(task)}
-          <div class="drag-handle" aria-label="Reorder task" aria-hidden="true">⠿</div>
         </div>
       </div>
     `).join('');
@@ -1035,42 +1155,49 @@
 
   function renderTitleGroup() {
     if (currentCategoryId === null) {
-      return `<h1>Tasks v6</h1>`;
+      return `<h1 class="app-title">Tasks v8</h1>`;
     }
-    const cat  = categories.find(c => c.id === currentCategoryId);
-    const name = cat ? escHtml(cat.name) : 'Category';
+    const cat   = categories.find(c => c.id === currentCategoryId);
+    const name  = cat ? escHtml(cat.name) : 'Category';
+    const color = catColorVar(currentCategoryId);
     return `
       <button class="back-btn" onclick="navigateUp()" aria-label="Back">‹</button>
-      <h1 class="category-title">${name}</h1>
+      <h1 class="category-title" style="color:${color}">${name}</h1>
       <button class="more-btn" onclick="renameOrDeleteCurrentCategory()" aria-label="Category options">⋯</button>
     `;
   }
 
+  // Children are pure navigation (tap to drill in) — never a "selected
+  // filter" — so every chip renders the same way, in its own color, with no
+  // active/inactive distinction to invent. The trailing "›" echoes the
+  // header's "‹" back button: one visual language for "this moves you".
   function renderCategoryChips() {
     const children = getChildren(currentCategoryId);
     const chips = children
-      .map(c => `<button class="filter-btn" data-category-drop="${c.id}" onclick="navigateToCategory(${c.id})">${escHtml(c.name)}</button>`)
+      .map(c => `<button class="cat-chip" data-category-drop="${c.id}" style="color:${catColorVar(c.id)}" onclick="navigateToCategory(${c.id})">${escHtml(c.name)} ›</button>`)
       .join('');
     const addControl = addingCategory
       ? `<input class="category-add-input" id="categoryAddInput" type="text" maxlength="60"
                 placeholder="Category name" autocomplete="off"
                 onkeydown="if(event.key==='Enter'){this.blur();}else if(event.key==='Escape'){cancelAddCategory();}"
                 onblur="commitAddCategory()">`
-      : `<button class="filter-btn" onclick="startAddCategory()" aria-label="Add category">+</button>`;
+      : `<button class="add-cat-btn" onclick="startAddCategory()" aria-label="Add category">+</button>`;
     return chips + addControl;
   }
 
-  // Passive indicator only — re-filing a task is done by dragging it onto a
-  // category chip or the title area (see startDrag/onDragMove/onDragEnd),
-  // not by picking from a control here. Only shown when the task's actual
-  // category differs from the one currently being browsed, since that's the
-  // only time it's not already obvious (aggregated views mix subcategories).
+  // Passive indicator only — re-filing a task is done by pressing and holding
+  // it, then dragging onto a category chip or the title area (see
+  // startPress/beginDrag/onDragMove/onDragEnd), not by picking from a control
+  // here. Only shown when the task's actual category differs from the one
+  // currently being browsed, since that's the only time it's not already
+  // obvious (aggregated views mix subcategories).
   function renderCategoryLabel(task) {
     const taskCategoryId = task.categoryId ?? null;
     if (taskCategoryId === currentCategoryId) return '';
-    const cat  = categories.find(c => c.id === taskCategoryId);
-    const name = cat ? cat.name : 'Uncategorized';
-    return `<span class="category-label">${escHtml(name)}</span>`;
+    const cat   = categories.find(c => c.id === taskCategoryId);
+    const name  = cat ? cat.name : 'Uncategorized';
+    const color = cat ? catColorVar(taskCategoryId) : 'var(--text-dimmer)';
+    return `<span class="category-label" style="color:${color}">${escHtml(name)}</span>`;
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────
@@ -1093,18 +1220,27 @@
     if (e.key === 'Enter') addTask();
   });
 
-  // ── Swipe-to-delete & drag-to-reorder ────────────────────────────────────
-  // Both are implemented with pointer events (works for touch AND mouse) via
-  // delegation on the list container, so listeners survive full re-renders.
+  // ── Tap / swipe-to-delete / press-and-hold-to-reorder ────────────────────
+  // All three are one gesture funnel, delegated from the list container so
+  // listeners survive full re-renders. Any press on a row starts "pending":
+  // release quickly with little movement and it's an ordinary tap (native
+  // click fires on the checkbox/text beneath, untouched by any of this);
+  // move sideways past the threshold first and it resolves as swipe-to-delete;
+  // move vertically first and it's left as a normal page scroll; hold still
+  // long enough and it "picks up" the row for reordering/re-filing — the same
+  // vertical-drag + category-drop-target mechanics as before, just entered by
+  // a hold instead of a dedicated handle.
   const taskListEl = document.getElementById('taskList');
 
   const SWIPE_OPEN      = -76; // px the row slides to reveal the delete button
   const SWIPE_THRESHOLD = 40;  // px drag needed to toggle open/closed
+  const LONG_PRESS_MS   = 400; // hold duration before a still press picks the row up
 
-  let openSwipeId      = null; // id of the currently swiped-open row, if any
-  let swipeState       = null;
-  let dragState        = null;
-  let suppressClick    = false;
+  let openSwipeId       = null; // id of the currently swiped-open row, if any
+  let pressState        = null;
+  let longPressTimer    = null;
+  let dragState         = null;
+  let suppressClick     = false;
   let highlightedDropEl = null; // category chip/title currently hovered while dragging
 
   function updateDropHighlight(dropEl) {
@@ -1130,24 +1266,18 @@
     const wrapperEl = e.target.closest('.task-item-wrapper');
     const targetId  = wrapperEl ? Number(wrapperEl.dataset.id) : null;
 
-    // Tapping/dragging anywhere while a different row is swiped open just
+    // Tapping/pressing anywhere while a different row is swiped open just
     // closes that row first.
     if (openSwipeId !== null && openSwipeId !== targetId) {
       closeSwipe();
       suppressClick = true;
     }
 
-    const handle    = e.target.closest('.drag-handle');
     const deleteBtn = e.target.closest('.delete-reveal');
     const row       = e.target.closest('.task-row');
 
     if (deleteBtn) return; // let its own onclick handle deletion
-
-    if (handle) {
-      startDrag(e, handle);
-    } else if (row) {
-      startSwipe(e, row);
-    }
+    if (row) startPress(e, row);
   });
 
   function closeSwipe() {
@@ -1160,90 +1290,116 @@
     openSwipeId = null;
   }
 
-  function startSwipe(e, row) {
+  function startPress(e, row) {
     const wrapper = row.closest('.task-item-wrapper');
     const id      = Number(wrapper.dataset.id);
     const isOpen  = openSwipeId === id;
 
-    swipeState = {
-      id, row,
+    pressState = {
+      id, row, wrapper,
       pointerId: e.pointerId,
       startX: e.clientX,
       startY: e.clientY,
       baseX:  isOpen ? SWIPE_OPEN : 0,
       wasOpen: isOpen,
-      decided: null, // null (undecided) | 'swipe' | 'scroll'
+      mode: null, // null (pending) | 'swipe' | 'scroll' | 'drag'
     };
 
-    // Pointer capture is deferred to onSwipeMove, once a swipe is actually
-    // confirmed — capturing here would retarget the plain-tap click event to
-    // the row itself, breaking checkbox toggling and tap-to-edit.
+    // Pointer capture is deferred until a gesture is actually confirmed
+    // (swipe or drag) — capturing immediately would retarget the plain-tap
+    // click event to the row itself, breaking checkbox toggling and
+    // tap-to-edit.
     row.style.transition = 'none';
-    row.addEventListener('pointermove', onSwipeMove);
-    row.addEventListener('pointerup', onSwipeEnd);
-    row.addEventListener('pointercancel', onSwipeEnd);
+    row.addEventListener('pointermove', onPressMove);
+    row.addEventListener('pointerup', onPressEnd);
+    row.addEventListener('pointercancel', onPressEnd);
+
+    longPressTimer = setTimeout(beginDrag, LONG_PRESS_MS);
   }
 
-  function onSwipeMove(e) {
-    if (!swipeState) return;
-    const dx = e.clientX - swipeState.startX;
-    const dy = e.clientY - swipeState.startY;
+  function onPressMove(e) {
+    if (!pressState) return;
 
-    if (swipeState.decided === null) {
+    if (pressState.mode === 'drag') {
+      onDragMove(e);
+      return;
+    }
+
+    const dx = e.clientX - pressState.startX;
+    const dy = e.clientY - pressState.startY;
+
+    if (pressState.mode === null) {
       if (Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy)) {
-        swipeState.decided = 'swipe';
-        // Capture now (not on pointerdown) so a plain tap's click event
+        clearTimeout(longPressTimer);
+        pressState.mode = 'swipe';
+        // Capture now that a swipe is confirmed, so a plain tap elsewhere
         // still targets the checkbox/text underneath undisturbed.
-        swipeState.row.setPointerCapture(swipeState.pointerId);
+        pressState.row.setPointerCapture(pressState.pointerId);
       } else if (Math.abs(dy) > 8) {
-        swipeState.decided = 'scroll';
+        // Early vertical movement reads as an attempt to scroll the page,
+        // not pick the row up — cancel the hold and let it scroll normally.
+        clearTimeout(longPressTimer);
+        pressState.mode = 'scroll';
       }
     }
 
-    if (swipeState.decided !== 'swipe') return;
-
-    const x = Math.max(SWIPE_OPEN, Math.min(0, swipeState.baseX + dx));
-    swipeState.row.style.transform = `translateX(${x}px)`;
+    if (pressState.mode === 'swipe') {
+      const x = Math.max(SWIPE_OPEN, Math.min(0, pressState.baseX + dx));
+      pressState.row.style.transform = `translateX(${x}px)`;
+    }
+    // mode 'scroll', or still pending: nothing to do here.
   }
 
-  function onSwipeEnd(e) {
-    if (!swipeState) return;
-    const { row, id, decided, wasOpen } = swipeState;
-    row.removeEventListener('pointermove', onSwipeMove);
-    row.removeEventListener('pointerup', onSwipeEnd);
-    row.removeEventListener('pointercancel', onSwipeEnd);
+  function onPressEnd(e) {
+    if (!pressState) return;
+    clearTimeout(longPressTimer);
 
-    if (decided === 'swipe') {
-      const dx      = e.clientX - swipeState.startX;
-      const finalX  = swipeState.baseX + dx;
+    const { row, id, mode, wasOpen } = pressState;
+    row.removeEventListener('pointermove', onPressMove);
+    row.removeEventListener('pointerup', onPressEnd);
+    row.removeEventListener('pointercancel', onPressEnd);
+
+    if (mode === 'drag') {
+      onDragEnd();
+    } else if (mode === 'swipe') {
+      const dx = e.clientX - pressState.startX;
+      const finalX = pressState.baseX + dx;
       const shouldOpen = finalX < -SWIPE_THRESHOLD;
       row.style.transition = 'transform 0.2s ease';
       row.style.transform  = shouldOpen ? `translateX(${SWIPE_OPEN}px)` : 'translateX(0px)';
       openSwipeId = shouldOpen ? id : null;
-    } else if (decided === null && wasOpen) {
+    } else if (mode === null && wasOpen) {
       // A plain tap on a row that was already open just closes it.
       row.style.transition = 'transform 0.2s ease';
       row.style.transform  = 'translateX(0px)';
       openSwipeId = null;
       suppressClick = true;
     }
-    // Otherwise (plain tap on a closed row, or a vertical scroll): do
-    // nothing and let the native click fire on the checkbox/text beneath.
+    // Otherwise (plain tap on a closed row, or a scroll): do nothing and let
+    // the native click fire on the checkbox/text beneath.
 
-    swipeState = null;
+    pressState = null;
   }
 
-  function startDrag(e, handle) {
-    const wrapper    = handle.closest('.task-item-wrapper');
+  // Fires after LONG_PRESS_MS of holding still — "picks up" the row for
+  // reordering/re-filing. A no-op if the touch already resolved as a swipe/
+  // scroll, or was released, before the timer got here.
+  function beginDrag() {
+    if (!pressState || pressState.mode !== null) return;
+    pressState.mode = 'drag';
+    openSwipeId = null; // this row can't still be "open" once it's being dragged
+
+    const wrapper = pressState.wrapper;
+    pressState.row.setPointerCapture(pressState.pointerId);
+    pressState.row.style.transform = ''; // clear any partial swipe offset
+    pressState.row.style.transition = '';
+
     const wrappers   = Array.from(taskListEl.querySelectorAll('.task-item-wrapper'));
-    const startIndex = wrappers.indexOf(wrapper); // index within the visible list, not the full `tasks` array
-    if (startIndex === -1) return;
-
+    const startIndex = wrappers.indexOf(wrapper);
     const visibleIds = wrappers.map(w => Number(w.dataset.id));
-    const gap        = 8; // must match .task-list { gap: 8px }
-    const itemHeight = wrapper.getBoundingClientRect().height + gap;
+    const itemHeight = wrapper.getBoundingClientRect().height; // rows are contiguous now, no gap to add
 
-    dragState = { startIndex, currentIndex: startIndex, startY: e.clientY, itemHeight, wrapper, wrappers, visibleIds, dropTarget: undefined };
+    dragState = { startIndex, currentIndex: startIndex, startY: pressState.startY, itemHeight, wrapper, wrappers, visibleIds, dropTarget: undefined };
 
     wrapper.classList.add('dragging');
     // The dragged row otherwise occludes whatever is really underneath it
@@ -1251,10 +1407,6 @@
     // which would make elementFromPoint find itself instead of the chip/
     // header actually being hovered — so it's excluded from hit-testing.
     wrapper.style.pointerEvents = 'none';
-    handle.setPointerCapture(e.pointerId);
-    handle.addEventListener('pointermove', onDragMove);
-    handle.addEventListener('pointerup', onDragEnd);
-    handle.addEventListener('pointercancel', onDragEnd);
   }
 
   function onDragMove(e) {
@@ -1295,14 +1447,13 @@
     dragState.currentIndex = newIndex;
   }
 
-  function onDragEnd(e) {
+  function onDragEnd() {
     if (!dragState) return;
     const { wrapper, wrappers, startIndex, currentIndex, visibleIds, dropTarget } = dragState;
 
-    e.target.removeEventListener('pointermove', onDragMove);
-    e.target.removeEventListener('pointerup', onDragEnd);
-    e.target.removeEventListener('pointercancel', onDragEnd);
-
+    // Listener cleanup for pointermove/pointerup/pointercancel happens in
+    // onPressEnd (the function actually attached to the row) — this only
+    // undoes the drag-specific visuals and commits the result.
     wrappers.forEach(w => {
       w.style.transition = '';
       w.style.transform  = '';
