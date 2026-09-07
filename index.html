@@ -156,8 +156,27 @@
     /* ── Filter tabs ─────────────────────────────────── */
     .filter-bar {
       display: flex;
+      flex-wrap: wrap;
       padding: 10px 16px;
       gap: 8px;
+    }
+
+    /* ── Export / Import ─────────────────────────────── */
+    .io-actions {
+      display: flex;
+      gap: 14px;
+      align-items: center;
+      margin-left: auto;
+    }
+
+    .io-btn {
+      background: none;
+      border: none;
+      color: var(--accent);
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      padding: 6px 0;
     }
 
     .filter-btn {
@@ -187,21 +206,93 @@
       gap: 8px;
     }
 
-    .task-item {
+    /* Outer wrapper: clips the swipe-to-delete reveal to the rounded corners
+       and is what gets translated up/down during drag-to-reorder. */
+    .task-item-wrapper {
+      position: relative;
+      overflow: hidden;
+      border-radius: 14px;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.07);
+      animation: slideIn 0.2s ease;
+    }
+
+    .task-item-wrapper.dragging {
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
+      z-index: 5;
+    }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(-6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Red delete button revealed behind the row when swiped left */
+    .delete-reveal {
+      position: absolute;
+      inset: 0;
+      background: var(--danger);
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding-right: 22px;
+      border-radius: 14px;
+      cursor: pointer;
+    }
+
+    .delete-reveal-icon {
+      color: #fff;
+      font-size: 19px;
+      line-height: 1;
+    }
+
+    /* The visible white row that slides on top of .delete-reveal */
+    .task-row {
+      position: relative;
+      z-index: 1;
       background: var(--card);
       border-radius: 14px;
       padding: 14px 14px 14px 16px;
       display: flex;
       align-items: center;
       gap: 12px;
-      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.07);
-      /* Slide in animation */
-      animation: slideIn 0.2s ease;
+      touch-action: pan-y;
     }
 
-    @keyframes slideIn {
-      from { opacity: 0; transform: translateY(-6px); }
-      to   { opacity: 1; transform: translateY(0); }
+    /* Drag handle for reordering (vertical drag) */
+    .drag-handle {
+      width: 26px;
+      height: 26px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-secondary);
+      font-size: 18px;
+      line-height: 1;
+      cursor: grab;
+      touch-action: none;
+    }
+
+    /* Reordering only makes sense in the "All" view */
+    #taskList[data-filter="active"] .drag-handle,
+    #taskList[data-filter="done"] .drag-handle {
+      visibility: hidden;
+    }
+
+    /* Inline edit input, replaces .task-text while editing */
+    .edit-input {
+      flex: 1;
+      min-width: 0;
+      font-size: 16px;
+      line-height: 1.4;
+      font-family: inherit;
+      color: var(--text);
+      background: transparent;
+      border: none;
+      border-bottom: 1.5px solid var(--accent);
+      outline: none;
+      padding: 0 0 2px;
+      -webkit-appearance: none;
     }
 
     /* Circular checkbox */
@@ -249,31 +340,6 @@
     .task-text.done {
       text-decoration: line-through;
       color: var(--text-secondary);
-    }
-
-    /* Delete button */
-    .delete-btn {
-      width: 28px;
-      height: 28px;
-      border-radius: 50%;
-      background: none;
-      border: none;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: var(--text-secondary);
-      font-size: 16px;
-      flex-shrink: 0;
-      opacity: 0.5;
-      transition: opacity 0.15s, background 0.15s, color 0.15s;
-    }
-
-    .delete-btn:hover,
-    .delete-btn:active {
-      opacity: 1;
-      background: rgba(255, 59, 48, 0.12);
-      color: var(--danger);
     }
 
     /* ── Empty state ─────────────────────────────────── */
@@ -347,6 +413,11 @@
     <button class="filter-btn active" data-filter="all"   onclick="setFilter('all',   this)">All</button>
     <button class="filter-btn"        data-filter="active" onclick="setFilter('active', this)">Active</button>
     <button class="filter-btn"        data-filter="done"   onclick="setFilter('done',   this)">Done</button>
+    <div class="io-actions">
+      <button class="io-btn" onclick="exportTasks()">Export</button>
+      <button class="io-btn" onclick="document.getElementById('importFile').click()">Import</button>
+      <input type="file" id="importFile" accept="application/json" style="display:none" onchange="handleImportFile(event)">
+    </div>
   </div>
 
   <div class="task-list" id="taskList"></div>
@@ -355,6 +426,7 @@
   // ── State ──────────────────────────────────────────────────────────────
   let tasks  = [];
   let filter = 'all';
+  let editingId = null;
 
   const STORAGE_KEY = 'todo_tasks_v1';
 
@@ -417,6 +489,124 @@
     render();
   }
 
+  function reorderTask(fromIndex, toIndex) {
+    if (fromIndex === toIndex) return;
+    const [moved] = tasks.splice(fromIndex, 1);
+    tasks.splice(toIndex, 0, moved);
+    save();
+  }
+
+  // ── Editing ────────────────────────────────────────────────────────────
+  function startEdit(id) {
+    editingId = id;
+    render();
+    const input = document.getElementById(`edit-${id}`);
+    if (input) {
+      input.focus();
+      const len = input.value.length;
+      input.setSelectionRange(len, len); // cursor at end, not select-all — editing should extend text, not wipe it
+    }
+  }
+
+  function commitEdit(id) {
+    const input = document.getElementById(`edit-${id}`);
+    if (!input) return; // already committed/cancelled
+    const value = input.value.trim();
+    const task  = tasks.find(t => t.id === id);
+    if (task && value) {
+      task.text = value;
+      save();
+    }
+    editingId = null;
+    render();
+  }
+
+  function cancelEdit() {
+    editingId = null;
+    render();
+  }
+
+  // ── Export / Import ────────────────────────────────────────────────────
+  function exportTasks() {
+    if (tasks.length === 0) {
+      alert('No tasks to export yet.');
+      return;
+    }
+
+    const json     = JSON.stringify(tasks, null, 2);
+    const filename = `tasks-${new Date().toISOString().slice(0, 10)}.json`;
+    const file     = new File([json], filename, { type: 'application/json' });
+
+    // On iOS, sharing the file lets you save it to Files, AirDrop it, etc.
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      navigator.share({ files: [file], title: 'Tasks backup' }).catch(() => {});
+      return;
+    }
+
+    // Desktop / unsupported browsers: fall back to a plain download.
+    const url = URL.createObjectURL(file);
+    const a   = document.createElement('a');
+    a.href     = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function handleImportFile(event) {
+    const file = event.target.files[0];
+    event.target.value = ''; // reset so importing the same file again still fires onchange
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      let imported;
+      try {
+        imported = JSON.parse(reader.result);
+      } catch {
+        alert("That file isn't valid JSON.");
+        return;
+      }
+      if (!Array.isArray(imported)) {
+        alert('Expected a JSON file containing a list of tasks.');
+        return;
+      }
+
+      const existingIds = new Set(tasks.map(t => t.id));
+      let added = 0, skipped = 0;
+
+      for (const item of imported) {
+        if (!item || typeof item.text !== 'string' || !item.text.trim()) {
+          skipped++;
+          continue;
+        }
+        // A numeric id that already exists is treated as the same task (e.g.
+        // re-importing a backup) and skipped, rather than duplicated under a
+        // new id.
+        if (typeof item.id === 'number' && existingIds.has(item.id)) {
+          skipped++;
+          continue;
+        }
+        let id = typeof item.id === 'number' ? item.id : Date.now() + added;
+        while (existingIds.has(id)) id++; // guard against a freshly-generated id colliding
+        existingIds.add(id);
+        tasks.push({
+          id,
+          text:      item.text.trim(),
+          done:      !!item.done,
+          createdAt: typeof item.createdAt === 'string' ? item.createdAt : new Date().toISOString(),
+        });
+        added++;
+      }
+
+      save();
+      render();
+      alert(`Imported ${added} task${added === 1 ? '' : 's'}.` + (skipped ? ` Skipped ${skipped} invalid/duplicate.` : ''));
+    };
+    reader.readAsText(file);
+  }
+
   // ── Filter ─────────────────────────────────────────────────────────────
   function setFilter(f, btn) {
     filter = f;
@@ -430,6 +620,10 @@
     const listEl      = document.getElementById('taskList');
     const countEl     = document.getElementById('taskCount');
     const clearBtn    = document.getElementById('clearDoneBtn');
+
+    // Any open swipe or in-progress drag is visually reset by a fresh render.
+    openSwipeId = null;
+    listEl.dataset.filter = filter;
 
     const total    = tasks.length;
     const doneCount   = tasks.filter(t => t.done).length;
@@ -471,18 +665,28 @@
 
     // Task items
     listEl.innerHTML = visible.map(task => `
-      <div class="task-item" id="task-${task.id}">
-        <div class="check-circle ${task.done ? 'done' : ''}"
-             onclick="toggleTask(${task.id})"
-             role="checkbox"
-             aria-checked="${task.done}"
-             aria-label="Mark complete">
-          <span class="checkmark">✓</span>
+      <div class="task-item-wrapper" id="task-${task.id}" data-id="${task.id}">
+        <div class="delete-reveal" onclick="deleteTask(${task.id})" aria-label="Delete task">
+          <span class="delete-reveal-icon">🗑</span>
         </div>
-        <div class="task-text ${task.done ? 'done' : ''}">${escHtml(task.text)}</div>
-        <button class="delete-btn"
-                onclick="deleteTask(${task.id})"
-                aria-label="Delete task">✕</button>
+        <div class="task-row">
+          <div class="check-circle ${task.done ? 'done' : ''}"
+               onclick="toggleTask(${task.id})"
+               role="checkbox"
+               aria-checked="${task.done}"
+               aria-label="Mark complete">
+            <span class="checkmark">✓</span>
+          </div>
+          ${editingId === task.id
+            ? `<input class="edit-input" id="edit-${task.id}" type="text" maxlength="300"
+                      value="${escAttr(task.text)}"
+                      autocomplete="off" autocorrect="on" spellcheck="true"
+                      onkeydown="if(event.key==='Enter'){this.blur();}else if(event.key==='Escape'){cancelEdit();}"
+                      onblur="commitEdit(${task.id})">`
+            : `<div class="task-text ${task.done ? 'done' : ''}" onclick="startEdit(${task.id})">${escHtml(task.text)}</div>`
+          }
+          <div class="drag-handle" aria-label="Reorder task" aria-hidden="true">⠿</div>
+        </div>
       </div>
     `).join('');
   }
@@ -494,10 +698,213 @@
     return d.innerHTML;
   }
 
+  function escAttr(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
   // ── Keyboard ───────────────────────────────────────────────────────────
   document.getElementById('taskInput').addEventListener('keydown', e => {
     if (e.key === 'Enter') addTask();
   });
+
+  // ── Swipe-to-delete & drag-to-reorder ────────────────────────────────────
+  // Both are implemented with pointer events (works for touch AND mouse) via
+  // delegation on the list container, so listeners survive full re-renders.
+  const taskListEl = document.getElementById('taskList');
+
+  const SWIPE_OPEN      = -76; // px the row slides to reveal the delete button
+  const SWIPE_THRESHOLD = 40;  // px drag needed to toggle open/closed
+
+  let openSwipeId   = null; // id of the currently swiped-open row, if any
+  let swipeState    = null;
+  let dragState     = null;
+  let suppressClick = false;
+
+  // A capturing click listener lets us swallow the "tap" that merely closed
+  // an open swipe, so it doesn't also fire the checkbox/edit handler beneath it.
+  taskListEl.addEventListener('click', e => {
+    if (suppressClick) {
+      suppressClick = false;
+      e.stopPropagation();
+      e.preventDefault();
+    }
+  }, true);
+
+  taskListEl.addEventListener('pointerdown', e => {
+    suppressClick = false;
+
+    const wrapperEl = e.target.closest('.task-item-wrapper');
+    const targetId  = wrapperEl ? Number(wrapperEl.dataset.id) : null;
+
+    // Tapping/dragging anywhere while a different row is swiped open just
+    // closes that row first.
+    if (openSwipeId !== null && openSwipeId !== targetId) {
+      closeSwipe();
+      suppressClick = true;
+    }
+
+    const handle    = e.target.closest('.drag-handle');
+    const deleteBtn = e.target.closest('.delete-reveal');
+    const row       = e.target.closest('.task-row');
+
+    if (deleteBtn) return; // let its own onclick handle deletion
+
+    if (handle) {
+      startDrag(e, handle);
+    } else if (row) {
+      startSwipe(e, row);
+    }
+  });
+
+  function closeSwipe() {
+    if (openSwipeId == null) return;
+    const row = taskListEl.querySelector(`#task-${openSwipeId} .task-row`);
+    if (row) {
+      row.style.transition = 'transform 0.2s ease';
+      row.style.transform  = 'translateX(0px)';
+    }
+    openSwipeId = null;
+  }
+
+  function startSwipe(e, row) {
+    const wrapper = row.closest('.task-item-wrapper');
+    const id      = Number(wrapper.dataset.id);
+    const isOpen  = openSwipeId === id;
+
+    swipeState = {
+      id, row,
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      baseX:  isOpen ? SWIPE_OPEN : 0,
+      wasOpen: isOpen,
+      decided: null, // null (undecided) | 'swipe' | 'scroll'
+    };
+
+    // Pointer capture is deferred to onSwipeMove, once a swipe is actually
+    // confirmed — capturing here would retarget the plain-tap click event to
+    // the row itself, breaking checkbox toggling and tap-to-edit.
+    row.style.transition = 'none';
+    row.addEventListener('pointermove', onSwipeMove);
+    row.addEventListener('pointerup', onSwipeEnd);
+    row.addEventListener('pointercancel', onSwipeEnd);
+  }
+
+  function onSwipeMove(e) {
+    if (!swipeState) return;
+    const dx = e.clientX - swipeState.startX;
+    const dy = e.clientY - swipeState.startY;
+
+    if (swipeState.decided === null) {
+      if (Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy)) {
+        swipeState.decided = 'swipe';
+        // Capture now (not on pointerdown) so a plain tap's click event
+        // still targets the checkbox/text underneath undisturbed.
+        swipeState.row.setPointerCapture(swipeState.pointerId);
+      } else if (Math.abs(dy) > 8) {
+        swipeState.decided = 'scroll';
+      }
+    }
+
+    if (swipeState.decided !== 'swipe') return;
+
+    const x = Math.max(SWIPE_OPEN, Math.min(0, swipeState.baseX + dx));
+    swipeState.row.style.transform = `translateX(${x}px)`;
+  }
+
+  function onSwipeEnd(e) {
+    if (!swipeState) return;
+    const { row, id, decided, wasOpen } = swipeState;
+    row.removeEventListener('pointermove', onSwipeMove);
+    row.removeEventListener('pointerup', onSwipeEnd);
+    row.removeEventListener('pointercancel', onSwipeEnd);
+
+    if (decided === 'swipe') {
+      const dx      = e.clientX - swipeState.startX;
+      const finalX  = swipeState.baseX + dx;
+      const shouldOpen = finalX < -SWIPE_THRESHOLD;
+      row.style.transition = 'transform 0.2s ease';
+      row.style.transform  = shouldOpen ? `translateX(${SWIPE_OPEN}px)` : 'translateX(0px)';
+      openSwipeId = shouldOpen ? id : null;
+    } else if (decided === null && wasOpen) {
+      // A plain tap on a row that was already open just closes it.
+      row.style.transition = 'transform 0.2s ease';
+      row.style.transform  = 'translateX(0px)';
+      openSwipeId = null;
+      suppressClick = true;
+    }
+    // Otherwise (plain tap on a closed row, or a vertical scroll): do
+    // nothing and let the native click fire on the checkbox/text beneath.
+
+    swipeState = null;
+  }
+
+  function startDrag(e, handle) {
+    if (taskListEl.dataset.filter !== 'all') return; // reorder only makes sense in "All"
+
+    const wrapper    = handle.closest('.task-item-wrapper');
+    const id         = Number(wrapper.dataset.id);
+    const startIndex = tasks.findIndex(t => t.id === id);
+    if (startIndex === -1) return;
+
+    const gap        = 8; // must match .task-list { gap: 8px }
+    const itemHeight = wrapper.getBoundingClientRect().height + gap;
+    const wrappers   = Array.from(taskListEl.querySelectorAll('.task-item-wrapper'));
+
+    dragState = { id, startIndex, currentIndex: startIndex, startY: e.clientY, itemHeight, wrapper, wrappers };
+
+    wrapper.classList.add('dragging');
+    handle.setPointerCapture(e.pointerId);
+    handle.addEventListener('pointermove', onDragMove);
+    handle.addEventListener('pointerup', onDragEnd);
+    handle.addEventListener('pointercancel', onDragEnd);
+  }
+
+  function onDragMove(e) {
+    if (!dragState) return;
+    const dy = e.clientY - dragState.startY;
+    dragState.wrapper.style.transform = `translateY(${dy}px)`;
+
+    let newIndex = dragState.startIndex + Math.round(dy / dragState.itemHeight);
+    newIndex = Math.max(0, Math.min(dragState.wrappers.length - 1, newIndex));
+
+    dragState.wrappers.forEach((w, i) => {
+      if (w === dragState.wrapper) return;
+      let shift = 0;
+      if (dragState.startIndex < newIndex && i > dragState.startIndex && i <= newIndex) {
+        shift = -dragState.itemHeight;
+      } else if (dragState.startIndex > newIndex && i < dragState.startIndex && i >= newIndex) {
+        shift = dragState.itemHeight;
+      }
+      w.style.transition = 'transform 0.15s ease';
+      w.style.transform  = shift ? `translateY(${shift}px)` : '';
+    });
+
+    dragState.currentIndex = newIndex;
+  }
+
+  function onDragEnd(e) {
+    if (!dragState) return;
+    const { wrapper, wrappers, startIndex, currentIndex } = dragState;
+
+    e.target.removeEventListener('pointermove', onDragMove);
+    e.target.removeEventListener('pointerup', onDragEnd);
+    e.target.removeEventListener('pointercancel', onDragEnd);
+
+    wrappers.forEach(w => {
+      w.style.transition = '';
+      w.style.transform  = '';
+    });
+    wrapper.classList.remove('dragging');
+    dragState = null;
+
+    reorderTask(startIndex, currentIndex);
+    render();
+  }
 
   // ── Offline detection ─────────────────────────────────────────────────
   function updateOnlineStatus() {
