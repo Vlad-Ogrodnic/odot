@@ -11,7 +11,7 @@
 // the user clears Safari's website data).
 // ─────────────────────────────────────────────────────────────────────────────
 
-const CACHE_NAME = 'todo-app-v3';
+const CACHE_NAME = 'todo-app-v6';
 
 // All files that make up the app shell. Must be kept in sync with what's
 // actually in the project. If you add a new file (e.g. an icon PNG), add it

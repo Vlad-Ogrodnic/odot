@@ -72,31 +72,6 @@
       justify-content: space-between;
     }
 
-    .header h1 {
-      font-size: 32px;
-      font-weight: 700;
-      letter-spacing: -0.5px;
-      line-height: 1;
-    }
-
-    .clear-btn {
-      background: none;
-      border: none;
-      color: var(--danger);
-      font-size: 14px;
-      font-weight: 500;
-      cursor: pointer;
-      padding: 4px 0;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.2s;
-    }
-
-    .clear-btn.visible {
-      opacity: 1;
-      pointer-events: auto;
-    }
-
     .task-count {
       font-size: 14px;
       color: var(--text-secondary);
@@ -198,6 +173,127 @@
       color: white;
     }
 
+    /* ── Done time-window (shown only while the Done tab is active) ──── */
+    .window-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 0 16px 10px;
+    }
+
+    .window-btn {
+      padding: 4px 12px;
+      border-radius: 14px;
+      border: 1px solid var(--separator);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      background: var(--card);
+      color: var(--text-secondary);
+      -webkit-appearance: none;
+    }
+
+    .window-btn.active {
+      background: var(--accent-light);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    /* ── Categories (nested) ─────────────────────────── */
+    .category-bar {
+      padding: 0 16px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    /* Title area: plain "Tasks" at root, or a back/name/options row inside a category */
+    .title-group {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      min-width: 0;
+    }
+
+    .title-group h1 {
+      font-size: 32px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      line-height: 1;
+    }
+
+    .back-btn {
+      background: none;
+      border: none;
+      color: var(--accent);
+      font-size: 30px;
+      line-height: 1;
+      padding: 4px 6px 4px 0;
+      margin-left: -6px;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .category-title {
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      min-width: 0;
+    }
+
+    .more-btn {
+      background: none;
+      border: none;
+      color: var(--text-secondary);
+      font-size: 20px;
+      line-height: 1;
+      padding: 8px;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .category-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .category-add-input {
+      padding: 6px 14px;
+      border-radius: 20px;
+      border: 1.5px solid var(--accent);
+      font-size: 14px;
+      font-family: inherit;
+      background: var(--card);
+      color: var(--text);
+      outline: none;
+      min-width: 120px;
+      -webkit-appearance: none;
+    }
+
+    /* Passive "which category is this from" indicator (aggregated views only) */
+    .category-label {
+      flex-shrink: 0;
+      max-width: 90px;
+      font-size: 12px;
+      color: var(--text-secondary);
+      background: var(--bg);
+      border-radius: 8px;
+      padding: 3px 8px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Highlighted while dragging a task over a valid category drop target */
+    .drop-target-hover {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
     /* ── Task list ───────────────────────────────────── */
     .task-list {
       padding: 0 16px 32px;
@@ -271,12 +367,6 @@
       line-height: 1;
       cursor: grab;
       touch-action: none;
-    }
-
-    /* Reordering only makes sense in the "All" view */
-    #taskList[data-filter="active"] .drag-handle,
-    #taskList[data-filter="done"] .drag-handle {
-      visibility: hidden;
     }
 
     /* Inline edit input, replaces .task-text while editing */
@@ -390,8 +480,7 @@
 
   <div class="header">
     <div class="header-top">
-      <h1>Tasks</h1>
-      <button class="clear-btn" id="clearDoneBtn" onclick="clearCompleted()">Clear done</button>
+      <div class="title-group" id="titleGroup"></div>
     </div>
     <div class="task-count" id="taskCount">No tasks yet</div>
   </div>
@@ -420,6 +509,12 @@
     </div>
   </div>
 
+  <div id="doneWindowChips"></div>
+
+  <div class="category-bar">
+    <div class="category-chips" id="categoryChips"></div>
+  </div>
+
   <div class="task-list" id="taskList"></div>
 
 <script>
@@ -427,8 +522,13 @@
   let tasks  = [];
   let filter = 'all';
   let editingId = null;
+  let categories = [];
+  let currentCategoryId = null; // null = root/"All"
+  let addingCategory = false;
+  let doneWindow = 'all'; // 'today' | 'week' | 'month' | 'all' — only relevant when filter === 'done'
 
-  const STORAGE_KEY = 'todo_tasks_v1';
+  const STORAGE_KEY    = 'todo_tasks_v1';
+  const CATEGORIES_KEY = 'todo_categories_v1';
 
   // ── Persistence ────────────────────────────────────────────────────────
   function load() {
@@ -442,6 +542,22 @@
   function save() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+    } catch (e) {
+      console.warn('Storage write failed:', e);
+    }
+  }
+
+  function loadCategories() {
+    try {
+      categories = JSON.parse(localStorage.getItem(CATEGORIES_KEY) || '[]');
+    } catch {
+      categories = [];
+    }
+  }
+
+  function saveCategories() {
+    try {
+      localStorage.setItem(CATEGORIES_KEY, JSON.stringify(categories));
     } catch (e) {
       console.warn('Storage write failed:', e);
     }
@@ -461,6 +577,7 @@
       text,
       done:      false,
       createdAt: new Date().toISOString(),
+      categoryId: currentCategoryId,
     });
 
     save();
@@ -473,6 +590,7 @@
     const task = tasks.find(t => t.id === id);
     if (!task) return;
     task.done = !task.done;
+    if (task.done) task.completedAt = new Date().toISOString();
     save();
     render();
   }
@@ -483,16 +601,22 @@
     render();
   }
 
-  function clearCompleted() {
-    tasks = tasks.filter(t => !t.done);
-    save();
-    render();
-  }
-
-  function reorderTask(fromIndex, toIndex) {
+  // Reorders by id, not raw array index: the visible list (after status AND
+  // category filtering) is a scattered subset of `tasks`, so the dragged/target
+  // positions from the DOM can't be spliced directly into the full array.
+  // Instead: compute the new relative order of just the visible ids, then walk
+  // the full array substituting visible tasks from that new order in place —
+  // every non-visible task keeps its original position untouched.
+  function commitReorder(visibleIds, fromIndex, toIndex) {
     if (fromIndex === toIndex) return;
-    const [moved] = tasks.splice(fromIndex, 1);
-    tasks.splice(toIndex, 0, moved);
+    const newOrder = visibleIds.slice();
+    const [movedId] = newOrder.splice(fromIndex, 1);
+    newOrder.splice(toIndex, 0, movedId);
+
+    const byId = new Map(tasks.map(t => [t.id, t]));
+    const visibleSet = new Set(visibleIds);
+    let cursor = 0;
+    tasks = tasks.map(t => visibleSet.has(t.id) ? byId.get(newOrder[cursor++]) : t);
     save();
   }
 
@@ -526,14 +650,132 @@
     render();
   }
 
-  // ── Export / Import ────────────────────────────────────────────────────
-  function exportTasks() {
-    if (tasks.length === 0) {
-      alert('No tasks to export yet.');
+  // ── Categories (nested) ────────────────────────────────────────────────
+  function getChildren(parentId) {
+    return categories.filter(c => c.parentId === parentId);
+  }
+
+  function getDescendantIds(id) {
+    const result = [];
+    const stack  = [id];
+    while (stack.length) {
+      const current = stack.pop();
+      for (const c of categories) {
+        if (c.parentId === current) {
+          result.push(c.id);
+          stack.push(c.id);
+        }
+      }
+    }
+    return result;
+  }
+
+  function navigateToCategory(id) {
+    currentCategoryId = id;
+    render();
+  }
+
+  function navigateUp() {
+    if (currentCategoryId === null) return;
+    const cat = categories.find(c => c.id === currentCategoryId);
+    navigateToCategory(cat ? cat.parentId : null);
+  }
+
+  // Mirrors startEdit/commitEdit/cancelEdit's inline-swap pattern, so adding a
+  // category feels like the same action as adding/editing a task instead of a
+  // separate native-popup interaction.
+  function startAddCategory() {
+    addingCategory = true;
+    render();
+    const input = document.getElementById('categoryAddInput');
+    if (input) input.focus();
+  }
+
+  // Names must be unique app-wide (not just among siblings) — two categories
+  // with the same name is confusing regardless of where they sit in the tree.
+  function categoryNameExists(name, excludeId = null) {
+    const lower = name.toLowerCase();
+    return categories.some(c => c.id !== excludeId && c.name.toLowerCase() === lower);
+  }
+
+  function commitAddCategory() {
+    const input = document.getElementById('categoryAddInput');
+    addingCategory = false;
+    if (!input) { render(); return; }
+    const name = input.value.trim();
+    if (name) {
+      if (categoryNameExists(name)) {
+        alert(`A category named "${name}" already exists.`);
+        addingCategory = true;
+        render();
+        const retryInput = document.getElementById('categoryAddInput');
+        if (retryInput) { retryInput.value = name; retryInput.focus(); }
+        return;
+      }
+      categories.push({ id: Date.now(), name, parentId: currentCategoryId, createdAt: new Date().toISOString() });
+      saveCategories();
+    }
+    render();
+  }
+
+  function cancelAddCategory() {
+    addingCategory = false;
+    render();
+  }
+
+  function renameOrDeleteCurrentCategory() {
+    if (currentCategoryId === null) return; // can't rename/delete the root
+    const cat = categories.find(c => c.id === currentCategoryId);
+    if (!cat) return;
+
+    const input = prompt('Rename category (clear the text and press OK to delete):', cat.name);
+    if (input === null) return; // cancelled
+    const trimmed = input.trim();
+
+    if (trimmed === '') {
+      const idsToDelete = new Set([cat.id, ...getDescendantIds(cat.id)]);
+      const ok = confirm(`Delete "${cat.name}"${idsToDelete.size > 1 ? ' and its subcategories' : ''}? Tasks inside will be moved to Uncategorized — nothing is deleted.`);
+      if (!ok) return;
+      tasks.forEach(t => {
+        if (t.categoryId !== null && t.categoryId !== undefined && idsToDelete.has(t.categoryId)) {
+          t.categoryId = null;
+        }
+      });
+      categories = categories.filter(c => !idsToDelete.has(c.id));
+      currentCategoryId = cat.parentId;
+      save();
+      saveCategories();
+      render();
       return;
     }
 
-    const json     = JSON.stringify(tasks, null, 2);
+    if (trimmed !== cat.name) {
+      if (categoryNameExists(trimmed, cat.id)) {
+        alert(`A category named "${trimmed}" already exists.`);
+        return;
+      }
+      cat.name = trimmed;
+      saveCategories();
+      render();
+    }
+  }
+
+  function assignTaskCategory(taskId, categoryIdStr) {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+    task.categoryId = categoryIdStr === '' ? null : Number(categoryIdStr);
+    save();
+    render();
+  }
+
+  // ── Export / Import ────────────────────────────────────────────────────
+  function exportTasks() {
+    if (tasks.length === 0 && categories.length === 0) {
+      alert('Nothing to export yet.');
+      return;
+    }
+
+    const json     = JSON.stringify({ categories, tasks }, null, 2);
     const filename = `tasks-${new Date().toISOString().slice(0, 10)}.json`;
     const file     = new File([json], filename, { type: 'application/json' });
 
@@ -561,46 +803,104 @@
 
     const reader = new FileReader();
     reader.onload = () => {
-      let imported;
+      let parsed;
       try {
-        imported = JSON.parse(reader.result);
+        parsed = JSON.parse(reader.result);
       } catch {
         alert("That file isn't valid JSON.");
         return;
       }
-      if (!Array.isArray(imported)) {
-        alert('Expected a JSON file containing a list of tasks.');
+
+      // Accept the legacy bare-array format (tasks only) as well as the
+      // current { categories, tasks } shape.
+      let importedTasks, importedCategories;
+      if (Array.isArray(parsed)) {
+        importedTasks = parsed;
+        importedCategories = [];
+      } else if (parsed && Array.isArray(parsed.tasks)) {
+        importedTasks = parsed.tasks;
+        importedCategories = Array.isArray(parsed.categories) ? parsed.categories : [];
+      } else {
+        alert('Expected a JSON file containing tasks (and optionally categories).');
         return;
       }
 
+      // Merge categories first, matching by (name, resolved parent) so two
+      // different branches can each have a same-named child without merging
+      // into one. Recursion (rather than assuming file order) resolves a
+      // category's parent on demand, memoized in categoryIdRemap.
+      const categoryIdRemap = new Map(); // imported category id -> final id in `categories`
+      const byImportedId    = new Map(importedCategories.filter(c => c && typeof c.id !== 'undefined').map(c => [c.id, c]));
+
+      // Category names are unique app-wide, so a name match (regardless of
+      // parent) unambiguously means "this is the same category" — matched
+      // ones keep their existing local placement rather than being reparented
+      // to wherever the import file had them.
+      function resolveCategory(importedCat) {
+        if (categoryIdRemap.has(importedCat.id)) return categoryIdRemap.get(importedCat.id);
+
+        const importedName = typeof importedCat.name === 'string' ? importedCat.name : 'Unnamed';
+        const existing = categories.find(c => c.name.toLowerCase() === importedName.toLowerCase());
+        if (existing) {
+          categoryIdRemap.set(importedCat.id, existing.id);
+          return existing.id;
+        }
+
+        let finalParentId = null;
+        if (importedCat.parentId !== null && importedCat.parentId !== undefined) {
+          const parentImported = byImportedId.get(importedCat.parentId);
+          finalParentId = parentImported ? resolveCategory(parentImported) : null;
+        }
+
+        let finalId = Date.now() + categories.length + categoryIdRemap.size;
+        while (categories.some(c => c.id === finalId)) finalId++;
+        categories.push({
+          id: finalId,
+          name: importedName,
+          parentId: finalParentId,
+          createdAt: typeof importedCat.createdAt === 'string' ? importedCat.createdAt : new Date().toISOString(),
+        });
+        categoryIdRemap.set(importedCat.id, finalId);
+        return finalId;
+      }
+
+      importedCategories.forEach(c => { if (c && typeof c.id !== 'undefined') resolveCategory(c); });
+
+      // Merge tasks: unchanged dedupe-by-id logic, plus remapping categoryId
+      // through the table built above (an unresolvable reference falls back
+      // to Uncategorized rather than dropping the task).
       const existingIds = new Set(tasks.map(t => t.id));
       let added = 0, skipped = 0;
 
-      for (const item of imported) {
+      for (const item of importedTasks) {
         if (!item || typeof item.text !== 'string' || !item.text.trim()) {
           skipped++;
           continue;
         }
-        // A numeric id that already exists is treated as the same task (e.g.
-        // re-importing a backup) and skipped, rather than duplicated under a
-        // new id.
         if (typeof item.id === 'number' && existingIds.has(item.id)) {
           skipped++;
           continue;
         }
         let id = typeof item.id === 'number' ? item.id : Date.now() + added;
-        while (existingIds.has(id)) id++; // guard against a freshly-generated id colliding
+        while (existingIds.has(id)) id++;
         existingIds.add(id);
+
+        const categoryId = (item.categoryId !== null && item.categoryId !== undefined && categoryIdRemap.has(item.categoryId))
+          ? categoryIdRemap.get(item.categoryId)
+          : null;
+
         tasks.push({
           id,
           text:      item.text.trim(),
           done:      !!item.done,
           createdAt: typeof item.createdAt === 'string' ? item.createdAt : new Date().toISOString(),
+          categoryId,
         });
         added++;
       }
 
       save();
+      saveCategories();
       render();
       alert(`Imported ${added} task${added === 1 ? '' : 's'}.` + (skipped ? ` Skipped ${skipped} invalid/duplicate.` : ''));
     };
@@ -615,18 +915,59 @@
     render();
   }
 
+  function setDoneWindow(w) {
+    doneWindow = w;
+    render();
+  }
+
+  // A task with no completedAt (done before this existed) falls back to
+  // createdAt, so it still lands somewhere sensible instead of never
+  // matching a window.
+  function isWithinWindow(task, window) {
+    if (window === 'all') return true;
+    const ts = new Date(task.completedAt || task.createdAt).getTime();
+    if (Number.isNaN(ts)) return true;
+    const now = Date.now();
+    const DAY = 24 * 60 * 60 * 1000;
+    if (window === 'today') return new Date(ts).toDateString() === new Date(now).toDateString();
+    if (window === 'week')  return now - ts < 7 * DAY;
+    if (window === 'month') return now - ts < 30 * DAY;
+    return true;
+  }
+
+  function renderDoneWindowChips() {
+    if (filter !== 'done') return '';
+    const options = [['today', 'Today'], ['week', 'Last week'], ['month', 'Last month'], ['all', 'All time']];
+    const chips = options
+      .map(([val, label]) => `<button class="window-btn ${doneWindow === val ? 'active' : ''}" onclick="setDoneWindow('${val}')">${label}</button>`)
+      .join('');
+    return `<div class="window-chips">${chips}</div>`;
+  }
+
   // ── Render ─────────────────────────────────────────────────────────────
   function render() {
     const listEl      = document.getElementById('taskList');
     const countEl     = document.getElementById('taskCount');
-    const clearBtn    = document.getElementById('clearDoneBtn');
 
     // Any open swipe or in-progress drag is visually reset by a fresh render.
     openSwipeId = null;
-    listEl.dataset.filter = filter;
 
-    const total    = tasks.length;
-    const doneCount   = tasks.filter(t => t.done).length;
+    // Title area (root heading, or back/name/options when inside a category),
+    // the child-category chip row, and the Done-only time-window row.
+    const titleGroupEl = document.getElementById('titleGroup');
+    titleGroupEl.innerHTML = renderTitleGroup();
+    titleGroupEl.dataset.categoryDrop = currentCategoryId === null ? '' : String(currentCategoryId);
+    document.getElementById('categoryChips').innerHTML = renderCategoryChips();
+    document.getElementById('doneWindowChips').innerHTML = renderDoneWindowChips();
+
+    // A category view includes tasks filed directly in it AND anywhere in its
+    // subtree — so "Done" under "Work" also shows done tasks from "Work/Client
+    // A", instead of only tasks filed in "Work" itself. At root this means
+    // every task in the app, which is what "All" should mean.
+    const inScope = new Set([currentCategoryId, ...getDescendantIds(currentCategoryId)]);
+    const categoryTasks = tasks.filter(t => inScope.has(t.categoryId ?? null));
+    const total       = categoryTasks.length;
+    const doneCount   = categoryTasks.filter(t => t.done).length;
     const activeCount = total - doneCount;
 
     // Update count label
@@ -636,13 +977,11 @@
       countEl.textContent = `${activeCount} remaining · ${doneCount} done`;
     }
 
-    // Show/hide "Clear done" button
-    clearBtn.classList.toggle('visible', doneCount > 0);
-
-    // Filter tasks
-    const visible = tasks.filter(t => {
+    // Further filter by status tab (and, in Done, the time window) on top of
+    // the category scope above
+    const visible = categoryTasks.filter(t => {
       if (filter === 'active') return !t.done;
-      if (filter === 'done')   return  t.done;
+      if (filter === 'done')   return  t.done && isWithinWindow(t, doneWindow);
       return true;
     });
 
@@ -651,7 +990,9 @@
       const msgs = {
         all:    { icon: '📝', title: 'Nothing here yet',     sub: 'Type a task above and tap Add' },
         active: { icon: '✅', title: 'All caught up!',       sub: 'No active tasks remaining'     },
-        done:   { icon: '🎯', title: 'Nothing completed yet', sub: 'Finish a task to see it here'  },
+        done:   doneWindow === 'all'
+          ? { icon: '🎯', title: 'Nothing completed yet', sub: 'Finish a task to see it here' }
+          : { icon: '🎯', title: 'Nothing here',          sub: 'No tasks completed in this time range' },
       };
       const m = msgs[filter];
       listEl.innerHTML = `
@@ -685,10 +1026,51 @@
                       onblur="commitEdit(${task.id})">`
             : `<div class="task-text ${task.done ? 'done' : ''}" onclick="startEdit(${task.id})">${escHtml(task.text)}</div>`
           }
+          ${renderCategoryLabel(task)}
           <div class="drag-handle" aria-label="Reorder task" aria-hidden="true">⠿</div>
         </div>
       </div>
     `).join('');
+  }
+
+  function renderTitleGroup() {
+    if (currentCategoryId === null) {
+      return `<h1>Tasks v6</h1>`;
+    }
+    const cat  = categories.find(c => c.id === currentCategoryId);
+    const name = cat ? escHtml(cat.name) : 'Category';
+    return `
+      <button class="back-btn" onclick="navigateUp()" aria-label="Back">‹</button>
+      <h1 class="category-title">${name}</h1>
+      <button class="more-btn" onclick="renameOrDeleteCurrentCategory()" aria-label="Category options">⋯</button>
+    `;
+  }
+
+  function renderCategoryChips() {
+    const children = getChildren(currentCategoryId);
+    const chips = children
+      .map(c => `<button class="filter-btn" data-category-drop="${c.id}" onclick="navigateToCategory(${c.id})">${escHtml(c.name)}</button>`)
+      .join('');
+    const addControl = addingCategory
+      ? `<input class="category-add-input" id="categoryAddInput" type="text" maxlength="60"
+                placeholder="Category name" autocomplete="off"
+                onkeydown="if(event.key==='Enter'){this.blur();}else if(event.key==='Escape'){cancelAddCategory();}"
+                onblur="commitAddCategory()">`
+      : `<button class="filter-btn" onclick="startAddCategory()" aria-label="Add category">+</button>`;
+    return chips + addControl;
+  }
+
+  // Passive indicator only — re-filing a task is done by dragging it onto a
+  // category chip or the title area (see startDrag/onDragMove/onDragEnd),
+  // not by picking from a control here. Only shown when the task's actual
+  // category differs from the one currently being browsed, since that's the
+  // only time it's not already obvious (aggregated views mix subcategories).
+  function renderCategoryLabel(task) {
+    const taskCategoryId = task.categoryId ?? null;
+    if (taskCategoryId === currentCategoryId) return '';
+    const cat  = categories.find(c => c.id === taskCategoryId);
+    const name = cat ? cat.name : 'Uncategorized';
+    return `<span class="category-label">${escHtml(name)}</span>`;
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────
@@ -719,10 +1101,18 @@
   const SWIPE_OPEN      = -76; // px the row slides to reveal the delete button
   const SWIPE_THRESHOLD = 40;  // px drag needed to toggle open/closed
 
-  let openSwipeId   = null; // id of the currently swiped-open row, if any
-  let swipeState    = null;
-  let dragState     = null;
-  let suppressClick = false;
+  let openSwipeId      = null; // id of the currently swiped-open row, if any
+  let swipeState       = null;
+  let dragState        = null;
+  let suppressClick    = false;
+  let highlightedDropEl = null; // category chip/title currently hovered while dragging
+
+  function updateDropHighlight(dropEl) {
+    if (highlightedDropEl === dropEl) return;
+    if (highlightedDropEl) highlightedDropEl.classList.remove('drop-target-hover');
+    highlightedDropEl = dropEl || null;
+    if (highlightedDropEl) highlightedDropEl.classList.add('drop-target-hover');
+  }
 
   // A capturing click listener lets us swallow the "tap" that merely closed
   // an open swipe, so it doesn't also fire the checkbox/edit handler beneath it.
@@ -844,20 +1234,23 @@
   }
 
   function startDrag(e, handle) {
-    if (taskListEl.dataset.filter !== 'all') return; // reorder only makes sense in "All"
-
     const wrapper    = handle.closest('.task-item-wrapper');
-    const id         = Number(wrapper.dataset.id);
-    const startIndex = tasks.findIndex(t => t.id === id);
+    const wrappers   = Array.from(taskListEl.querySelectorAll('.task-item-wrapper'));
+    const startIndex = wrappers.indexOf(wrapper); // index within the visible list, not the full `tasks` array
     if (startIndex === -1) return;
 
+    const visibleIds = wrappers.map(w => Number(w.dataset.id));
     const gap        = 8; // must match .task-list { gap: 8px }
     const itemHeight = wrapper.getBoundingClientRect().height + gap;
-    const wrappers   = Array.from(taskListEl.querySelectorAll('.task-item-wrapper'));
 
-    dragState = { id, startIndex, currentIndex: startIndex, startY: e.clientY, itemHeight, wrapper, wrappers };
+    dragState = { startIndex, currentIndex: startIndex, startY: e.clientY, itemHeight, wrapper, wrappers, visibleIds, dropTarget: undefined };
 
     wrapper.classList.add('dragging');
+    // The dragged row otherwise occludes whatever is really underneath it
+    // (it paints above normal-flow siblings while its z-index is raised),
+    // which would make elementFromPoint find itself instead of the chip/
+    // header actually being hovered — so it's excluded from hit-testing.
+    wrapper.style.pointerEvents = 'none';
     handle.setPointerCapture(e.pointerId);
     handle.addEventListener('pointermove', onDragMove);
     handle.addEventListener('pointerup', onDragEnd);
@@ -868,6 +1261,21 @@
     if (!dragState) return;
     const dy = e.clientY - dragState.startY;
     dragState.wrapper.style.transform = `translateY(${dy}px)`;
+
+    // Dragging onto a category chip or the title area re-files the task
+    // there instead of reordering it — check that before the reorder math.
+    const dropEl = document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-category-drop]');
+    updateDropHighlight(dropEl || null);
+
+    if (dropEl) {
+      dragState.dropTarget = dropEl.dataset.categoryDrop;
+      dragState.currentIndex = dragState.startIndex; // no reorder while re-filing
+      dragState.wrappers.forEach(w => {
+        if (w !== dragState.wrapper) w.style.transform = '';
+      });
+      return;
+    }
+    dragState.dropTarget = undefined;
 
     let newIndex = dragState.startIndex + Math.round(dy / dragState.itemHeight);
     newIndex = Math.max(0, Math.min(dragState.wrappers.length - 1, newIndex));
@@ -889,7 +1297,7 @@
 
   function onDragEnd(e) {
     if (!dragState) return;
-    const { wrapper, wrappers, startIndex, currentIndex } = dragState;
+    const { wrapper, wrappers, startIndex, currentIndex, visibleIds, dropTarget } = dragState;
 
     e.target.removeEventListener('pointermove', onDragMove);
     e.target.removeEventListener('pointerup', onDragEnd);
@@ -900,10 +1308,16 @@
       w.style.transform  = '';
     });
     wrapper.classList.remove('dragging');
+    wrapper.style.pointerEvents = '';
+    updateDropHighlight(null);
     dragState = null;
 
-    reorderTask(startIndex, currentIndex);
-    render();
+    if (dropTarget !== undefined) {
+      assignTaskCategory(visibleIds[startIndex], dropTarget); // already re-renders
+    } else {
+      commitReorder(visibleIds, startIndex, currentIndex);
+      render();
+    }
   }
 
   // ── Offline detection ─────────────────────────────────────────────────
@@ -926,6 +1340,7 @@
 
   // ── Boot ───────────────────────────────────────────────────────────────
   load();
+  loadCategories();
   render();
 </script>
 </body>
