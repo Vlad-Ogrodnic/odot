@@ -372,27 +372,21 @@
        then type the name. */
     .add-cat-form {
       display: flex;
-      flex-direction: column;
+      align-items: center;
       gap: 10px;
       width: 100%;
     }
 
-    .swatch-picker {
-      display: flex;
-      gap: 10px;
-    }
-
-    .swatch-option {
-      width: 24px;
-      height: 24px;
+    .category-color-input {
+      width: 30px;
+      height: 30px;
+      flex-shrink: 0;
+      border: none;
       border-radius: 50%;
-      border: 2px solid transparent;
+      overflow: hidden;
       padding: 0;
       cursor: pointer;
-    }
-
-    .swatch-option.selected {
-      border-color: var(--text);
+      background: none;
     }
 
     .category-add-input {
@@ -483,7 +477,16 @@
       display: flex;
       align-items: center;
       gap: 13px;
-      touch-action: pan-y;
+      /* DIAGNOSTIC (v12): temporarily `none` instead of `pan-y`, to test
+         whether pan-y itself is what's keeping iOS's native long-press
+         text-selection gesture alive alongside our own touch handling —
+         user-select/touch-callout/selectstart/preventDefault below all
+         failed to stop it on-device with pan-y in place. If this fixes it,
+         native scroll-by-touching-a-row needs a real JS replacement next
+         (this alone will make that scroll feel worse, not better — expected
+         for this test, not a rollback of the smoothness work). If it
+         doesn't fix it either, revert this and keep looking elsewhere. */
+      touch-action: none;
       /* Without this, holding a row to drag it also triggers the browser's
          native text-selection/callout on whatever text is under the finger. */
       -webkit-user-select: none;
@@ -675,9 +678,9 @@
   let categories = [];
   let currentCategoryId = null; // null = root/"All"
   let addingCategory = false;
-  let addingCategoryColor = 0; // hue index chosen so far in the in-progress add-category form
-  // Tapping a swatch blurs the name input, which would otherwise commit (and
-  // tear down) the add-category form mid-selection. Set on pointerdown —
+  let addingCategoryColor = '#4C6899'; // hex color chosen so far in the in-progress add-category form
+  // Opening the color picker blurs the name input, which would otherwise
+  // commit (and tear down) the add-category form mid-selection. Set on pointerdown —
   // which reliably fires before blur on both touch and mouse — and consumed
   // once by the input's blur handler. More robust here than relying on
   // focus-event relatedTarget, which touch-triggered blur on iOS Safari
@@ -828,11 +831,15 @@
     return result;
   }
 
-  // Category color: whatever was explicitly picked when it was created. A
-  // category from before the picker existed has no stored `color`, so it
-  // falls back to a stable hash of its id instead of losing color entirely.
+  // Category color: whatever was explicitly picked when it was created.
+  // - string  → a literal hex color, chosen freely via the color picker.
+  // - number  → legacy: an index into the old fixed --cat-0..5 palette,
+  //             from categories created back when that's all there was.
+  // - missing → older still, from before any picker existed — falls back to
+  //             a stable hash of the id instead of losing color entirely.
   const CATEGORY_HUES = 6;
   function catColorVar(cat) {
+    if (cat && typeof cat.color === 'string') return cat.color;
     const idx = cat && typeof cat.color === 'number' ? cat.color : (cat ? cat.id % CATEGORY_HUES : 0);
     return `var(--cat-${idx})`;
   }
@@ -853,28 +860,20 @@
   // separate native-popup interaction.
   function startAddCategory() {
     addingCategory = true;
-    // Default to a color no sibling here is already using, where possible —
-    // just a friendlier starting point, since it's still freely changeable.
-    const siblingColors = new Set(getChildren(currentCategoryId).map(c => catColorVar(c)));
-    addingCategoryColor = 0;
-    for (let i = 0; i < CATEGORY_HUES; i++) {
-      if (!siblingColors.has(`var(--cat-${i})`)) { addingCategoryColor = i; break; }
-    }
+    addingCategoryColor = '#4C6899'; // just a starting point — freely changeable before confirming
     render();
     const input = document.getElementById('categoryAddInput');
     if (input) input.focus();
   }
 
-  // Swaps the selected swatch directly in the DOM rather than going through
-  // render(), which would wipe out whatever name the user has already typed
-  // (a fresh render rebuilds the input from scratch, empty).
-  function selectAddCategoryColor(i, btnEl) {
-    addingCategoryColor = i;
-    btnEl.parentElement.querySelectorAll('.swatch-option').forEach(b => b.classList.remove('selected'));
-    btnEl.classList.add('selected');
-    // Tapping a swatch blurs the name field; the blur handler already
-    // ignores that (see the relatedTarget check), but bring focus back so
-    // typing can continue without an extra tap.
+  // Called as the native color picker reports a new value. Doesn't go
+  // through render() — that would wipe out whatever name the user has
+  // already typed (a fresh render rebuilds the input from scratch, empty).
+  function selectAddCategoryColor(hex) {
+    addingCategoryColor = hex;
+    // Opening the color picker blurs the name field; the blur handler
+    // already ignores that (see skipNextCategoryBlur), but bring focus back
+    // so typing can continue without an extra tap.
     const input = document.getElementById('categoryAddInput');
     if (input) input.focus();
   }
@@ -1232,7 +1231,7 @@
 
   function renderTitleGroup() {
     if (currentCategoryId === null) {
-      return `<h1 class="app-title">Tasks v11</h1>`;
+      return `<h1 class="app-title">Tasks v12</h1>`;
     }
     const cat   = categories.find(c => c.id === currentCategoryId);
     const name  = cat ? escHtml(cat.name) : 'Category';
@@ -1255,14 +1254,10 @@
       .join('');
     const addControl = addingCategory
       ? `<div class="add-cat-form">
-           <div class="swatch-picker">
-             ${Array.from({ length: CATEGORY_HUES }, (_, i) => `
-               <button type="button" class="swatch-option ${i === addingCategoryColor ? 'selected' : ''}"
-                       style="background:var(--cat-${i})" aria-label="Color ${i + 1}"
-                       onpointerdown="skipNextCategoryBlur=true"
-                       onclick="selectAddCategoryColor(${i}, this)"></button>
-             `).join('')}
-           </div>
+           <input type="color" class="category-color-input" id="categoryColorInput"
+                  value="${addingCategoryColor}" aria-label="Category color"
+                  onpointerdown="skipNextCategoryBlur=true"
+                  oninput="selectAddCategoryColor(this.value)">
            <input class="category-add-input" id="categoryAddInput" type="text" maxlength="60"
                   placeholder="Category name" autocomplete="off"
                   onkeydown="if(event.key==='Enter'){this.blur();}else if(event.key==='Escape'){cancelAddCategory();}"
