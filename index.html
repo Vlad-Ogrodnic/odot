@@ -477,15 +477,13 @@
       display: flex;
       align-items: center;
       gap: 13px;
-      /* DIAGNOSTIC (v12): temporarily `none` instead of `pan-y`, to test
-         whether pan-y itself is what's keeping iOS's native long-press
-         text-selection gesture alive alongside our own touch handling —
-         user-select/touch-callout/selectstart/preventDefault below all
-         failed to stop it on-device with pan-y in place. If this fixes it,
-         native scroll-by-touching-a-row needs a real JS replacement next
-         (this alone will make that scroll feel worse, not better — expected
-         for this test, not a rollback of the smoothness work). If it
-         doesn't fix it either, revert this and keep looking elsewhere. */
+      /* `none`, not `pan-y`: confirmed on-device (v12) that pan-y itself was
+         what kept iOS's native long-press text-selection gesture alive
+         alongside our own touch handling — user-select/touch-callout/
+         selectstart/preventDefault below all failed to stop it with pan-y
+         in place. This gives up native scroll-by-touching-a-row in
+         exchange (nothing here replaces it yet — scrolling currently relies
+         on touches that start off a row, or on already-native momentum). */
       touch-action: none;
       /* Without this, holding a row to drag it also triggers the browser's
          native text-selection/callout on whatever text is under the finger. */
@@ -1231,7 +1229,7 @@
 
   function renderTitleGroup() {
     if (currentCategoryId === null) {
-      return `<h1 class="app-title">Tasks v12</h1>`;
+      return `<h1 class="app-title">Tasks v13</h1>`;
     }
     const cat   = categories.find(c => c.id === currentCategoryId);
     const name  = cat ? escHtml(cat.name) : 'Category';
@@ -1319,6 +1317,11 @@
   const LONG_PRESS_MS   = 250; // hold duration before a still press picks the row up
   const PICKUP_MS       = 120; // pop animation when a row is first picked up
   const SETTLE_MS       = 160; // ease-into-place animation when a row is dropped
+  // Keep SETTLE_MS < LONG_PRESS_MS: beginDrag() cancels any pending settle
+  // via clearTimeout(settleTimer), with no check for which row it belonged
+  // to. That's fine only because a new drag can't physically arm until
+  // LONG_PRESS_MS after its own touch starts, by which point a shorter
+  // previous settle has always already finished on its own.
 
   let openSwipeId       = null; // id of the currently swiped-open row, if any
   let pressState        = null;
@@ -1338,7 +1341,16 @@
   // A capturing click listener lets us swallow the "tap" that merely closed
   // an open swipe, so it doesn't also fire the checkbox/edit handler beneath it.
   taskListEl.addEventListener('click', e => {
-    if (suppressClick) {
+    // dragState (not just suppressClick): pointer capture is supposed to
+    // route the eventual pointerup — and whatever click iOS synthesizes
+    // from it — to the dragged row, but Safari's touch-to-click pipeline
+    // doesn't reliably honor capture the way mouse-based pointer capture
+    // does. With siblings visually sliding into the dragged row's old slot
+    // mid-drag, a misrouted click can land on whichever row now happens to
+    // sit at the finger's screen position — toggling its checkbox or
+    // opening it for edit for an instant. No click is ever a real, intended
+    // one while a drag is in flight, so swallow all of them unconditionally.
+    if (suppressClick || dragState) {
       suppressClick = false;
       e.stopPropagation();
       e.preventDefault();
@@ -1379,14 +1391,10 @@
 
     if (deleteBtn) return; // let its own onclick handle deletion
     if (row) {
-      // The forceful version of the selectstart fix below: this tells iOS
-      // outright not to run ANY of its own touch gesture handling on this
-      // touch — which is what actually arms the native long-press text
-      // selection, before selectstart (or anything else) gets a chance to
-      // fire. touch-action:pan-y on .task-row still independently guarantees
-      // real scrolling keeps working — touch-action is resolved ahead of
-      // and regardless of preventDefault, specifically so a JS handler can
-      // never accidentally block panning.
+      // Belt-and-suspenders alongside touch-action:none and selectstart
+      // below — all three were needed together to actually stop iOS's
+      // native long-press text-selection from arming on-device; none of
+      // them alone was enough.
       e.preventDefault();
       startPress(e, row);
     }
@@ -1575,7 +1583,11 @@
     const { wrapper, wrappers, startIndex, currentIndex, itemHeight, visibleIds, dropTarget } = dragState;
 
     updateDropHighlight(null);
-    dragState = null; // clear now so a fresh press elsewhere isn't blocked by the settle below
+    // dragState stays set through the settle below (cleared in the timeout,
+    // not here) — the click listener checks it to swallow the stray click
+    // iOS sometimes fires against a sibling right as the drag ends (see that
+    // listener). Nothing here reads dragState again before the timeout, so
+    // leaving it set this long doesn't block a fresh press elsewhere either.
 
     // Ease the dragged row from wherever the finger left it into the gap its
     // siblings already opened up for it. The siblings themselves are left
@@ -1591,6 +1603,7 @@
     // back exactly where it started wouldn't change these style values, so
     // transitionend would never fire and everything would stay stuck mid-drag.
     settleTimer = setTimeout(() => {
+      dragState = null;
       wrappers.forEach(w => {
         w.style.transition = '';
         w.style.transform  = '';
