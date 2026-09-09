@@ -345,8 +345,8 @@
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      gap: 14px;
-      font-size: 15px;
+      gap: 16px;
+      font-size: 17px;
       font-weight: 700;
     }
 
@@ -368,6 +368,33 @@
       cursor: pointer;
     }
 
+    /* Shown in place of the "+" while naming a new category: pick a color,
+       then type the name. */
+    .add-cat-form {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      width: 100%;
+    }
+
+    .swatch-picker {
+      display: flex;
+      gap: 10px;
+    }
+
+    .swatch-option {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      padding: 0;
+      cursor: pointer;
+    }
+
+    .swatch-option.selected {
+      border-color: var(--text);
+    }
+
     .category-add-input {
       border: none;
       border-bottom: 1.5px solid var(--accent);
@@ -377,8 +404,8 @@
       background: transparent;
       color: var(--text);
       outline: none;
-      min-width: 120px;
-      padding: 0 0 2px;
+      width: 100%;
+      padding: 0 0 4px;
       -webkit-appearance: none;
     }
 
@@ -457,19 +484,38 @@
       align-items: center;
       gap: 13px;
       touch-action: pan-y;
+      /* Without this, holding a row to drag it also triggers the browser's
+         native text-selection/callout on whatever text is under the finger. */
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
     }
 
     .task-item-wrapper:last-child .task-row {
       border-bottom: none;
     }
 
-    /* Inline edit input, replaces .task-text while editing */
+    .task-number {
+      width: 20px;
+      flex-shrink: 0;
+      text-align: right;
+      font-size: 14px;
+      font-variant-numeric: tabular-nums;
+      color: var(--text-dimmer);
+    }
+
+    /* Inline edit input, replaces .task-text while editing — explicitly
+       selectable again, since it sits inside .task-row which turns
+       selection off for everything else. */
     .edit-input {
       flex: 1;
       min-width: 0;
       font-size: 16.5px;
       line-height: 1.4;
       font-family: inherit;
+      -webkit-user-select: text;
+      user-select: text;
+      -webkit-touch-callout: default;
       color: var(--text);
       background: transparent;
       border: none;
@@ -629,6 +675,14 @@
   let categories = [];
   let currentCategoryId = null; // null = root/"All"
   let addingCategory = false;
+  let addingCategoryColor = 0; // hue index chosen so far in the in-progress add-category form
+  // Tapping a swatch blurs the name input, which would otherwise commit (and
+  // tear down) the add-category form mid-selection. Set on pointerdown —
+  // which reliably fires before blur on both touch and mouse — and consumed
+  // once by the input's blur handler. More robust here than relying on
+  // focus-event relatedTarget, which touch-triggered blur on iOS Safari
+  // doesn't always populate.
+  let skipNextCategoryBlur = false;
   let doneWindow = 'all'; // 'today' | 'week' | 'month' | 'all' — only relevant when filter === 'done'
 
   const STORAGE_KEY    = 'todo_tasks_v1';
@@ -774,12 +828,13 @@
     return result;
   }
 
-  // Auto-assigns each category a stable color from the fixed --cat-0..5
-  // palette, keyed off its id — no color picker needed, and a category's
-  // color never changes as others are added or removed.
+  // Category color: whatever was explicitly picked when it was created. A
+  // category from before the picker existed has no stored `color`, so it
+  // falls back to a stable hash of its id instead of losing color entirely.
   const CATEGORY_HUES = 6;
-  function catColorVar(id) {
-    return `var(--cat-${id % CATEGORY_HUES})`;
+  function catColorVar(cat) {
+    const idx = cat && typeof cat.color === 'number' ? cat.color : (cat ? cat.id % CATEGORY_HUES : 0);
+    return `var(--cat-${idx})`;
   }
 
   function navigateToCategory(id) {
@@ -798,7 +853,28 @@
   // separate native-popup interaction.
   function startAddCategory() {
     addingCategory = true;
+    // Default to a color no sibling here is already using, where possible —
+    // just a friendlier starting point, since it's still freely changeable.
+    const siblingColors = new Set(getChildren(currentCategoryId).map(c => catColorVar(c)));
+    addingCategoryColor = 0;
+    for (let i = 0; i < CATEGORY_HUES; i++) {
+      if (!siblingColors.has(`var(--cat-${i})`)) { addingCategoryColor = i; break; }
+    }
     render();
+    const input = document.getElementById('categoryAddInput');
+    if (input) input.focus();
+  }
+
+  // Swaps the selected swatch directly in the DOM rather than going through
+  // render(), which would wipe out whatever name the user has already typed
+  // (a fresh render rebuilds the input from scratch, empty).
+  function selectAddCategoryColor(i, btnEl) {
+    addingCategoryColor = i;
+    btnEl.parentElement.querySelectorAll('.swatch-option').forEach(b => b.classList.remove('selected'));
+    btnEl.classList.add('selected');
+    // Tapping a swatch blurs the name field; the blur handler already
+    // ignores that (see the relatedTarget check), but bring focus back so
+    // typing can continue without an extra tap.
     const input = document.getElementById('categoryAddInput');
     if (input) input.focus();
   }
@@ -824,7 +900,7 @@
         if (retryInput) { retryInput.value = name; retryInput.focus(); }
         return;
       }
-      categories.push({ id: Date.now(), name, parentId: currentCategoryId, createdAt: new Date().toISOString() });
+      categories.push({ id: Date.now(), name, color: addingCategoryColor, parentId: currentCategoryId, createdAt: new Date().toISOString() });
       saveCategories();
     }
     render();
@@ -1126,12 +1202,13 @@
     }
 
     // Task items
-    listEl.innerHTML = visible.map(task => `
+    listEl.innerHTML = visible.map((task, index) => `
       <div class="task-item-wrapper" id="task-${task.id}" data-id="${task.id}">
         <div class="delete-reveal" onclick="deleteTask(${task.id})" aria-label="Delete task">
           <span class="delete-reveal-icon">🗑</span>
         </div>
         <div class="task-row">
+          <div class="task-number">${index + 1}</div>
           <div class="check-circle ${task.done ? 'done' : ''}"
                onclick="toggleTask(${task.id})"
                role="checkbox"
@@ -1155,11 +1232,11 @@
 
   function renderTitleGroup() {
     if (currentCategoryId === null) {
-      return `<h1 class="app-title">Tasks v8</h1>`;
+      return `<h1 class="app-title">Tasks v9</h1>`;
     }
     const cat   = categories.find(c => c.id === currentCategoryId);
     const name  = cat ? escHtml(cat.name) : 'Category';
-    const color = catColorVar(currentCategoryId);
+    const color = catColorVar(cat);
     return `
       <button class="back-btn" onclick="navigateUp()" aria-label="Back">‹</button>
       <h1 class="category-title" style="color:${color}">${name}</h1>
@@ -1174,13 +1251,23 @@
   function renderCategoryChips() {
     const children = getChildren(currentCategoryId);
     const chips = children
-      .map(c => `<button class="cat-chip" data-category-drop="${c.id}" style="color:${catColorVar(c.id)}" onclick="navigateToCategory(${c.id})">${escHtml(c.name)} ›</button>`)
+      .map(c => `<button class="cat-chip" data-category-drop="${c.id}" style="color:${catColorVar(c)}" onclick="navigateToCategory(${c.id})">${escHtml(c.name)} ›</button>`)
       .join('');
     const addControl = addingCategory
-      ? `<input class="category-add-input" id="categoryAddInput" type="text" maxlength="60"
-                placeholder="Category name" autocomplete="off"
-                onkeydown="if(event.key==='Enter'){this.blur();}else if(event.key==='Escape'){cancelAddCategory();}"
-                onblur="commitAddCategory()">`
+      ? `<div class="add-cat-form">
+           <div class="swatch-picker">
+             ${Array.from({ length: CATEGORY_HUES }, (_, i) => `
+               <button type="button" class="swatch-option ${i === addingCategoryColor ? 'selected' : ''}"
+                       style="background:var(--cat-${i})" aria-label="Color ${i + 1}"
+                       onpointerdown="skipNextCategoryBlur=true"
+                       onclick="selectAddCategoryColor(${i}, this)"></button>
+             `).join('')}
+           </div>
+           <input class="category-add-input" id="categoryAddInput" type="text" maxlength="60"
+                  placeholder="Category name" autocomplete="off"
+                  onkeydown="if(event.key==='Enter'){this.blur();}else if(event.key==='Escape'){cancelAddCategory();}"
+                  onblur="if(skipNextCategoryBlur){skipNextCategoryBlur=false;}else{commitAddCategory();}">
+         </div>`
       : `<button class="add-cat-btn" onclick="startAddCategory()" aria-label="Add category">+</button>`;
     return chips + addControl;
   }
@@ -1196,7 +1283,7 @@
     if (taskCategoryId === currentCategoryId) return '';
     const cat   = categories.find(c => c.id === taskCategoryId);
     const name  = cat ? cat.name : 'Uncategorized';
-    const color = cat ? catColorVar(taskCategoryId) : 'var(--text-dimmer)';
+    const color = cat ? catColorVar(cat) : 'var(--text-dimmer)';
     return `<span class="category-label" style="color:${color}">${escHtml(name)}</span>`;
   }
 
@@ -1234,7 +1321,7 @@
 
   const SWIPE_OPEN      = -76; // px the row slides to reveal the delete button
   const SWIPE_THRESHOLD = 40;  // px drag needed to toggle open/closed
-  const LONG_PRESS_MS   = 400; // hold duration before a still press picks the row up
+  const LONG_PRESS_MS   = 250; // hold duration before a still press picks the row up
 
   let openSwipeId       = null; // id of the currently swiped-open row, if any
   let pressState        = null;
