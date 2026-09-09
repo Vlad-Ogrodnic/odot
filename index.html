@@ -1232,7 +1232,7 @@
 
   function renderTitleGroup() {
     if (currentCategoryId === null) {
-      return `<h1 class="app-title">Tasks v9</h1>`;
+      return `<h1 class="app-title">Tasks v10</h1>`;
     }
     const cat   = categories.find(c => c.id === currentCategoryId);
     const name  = cat ? escHtml(cat.name) : 'Category';
@@ -1322,11 +1322,14 @@
   const SWIPE_OPEN      = -76; // px the row slides to reveal the delete button
   const SWIPE_THRESHOLD = 40;  // px drag needed to toggle open/closed
   const LONG_PRESS_MS   = 250; // hold duration before a still press picks the row up
+  const PICKUP_MS       = 120; // pop animation when a row is first picked up
+  const SETTLE_MS       = 160; // ease-into-place animation when a row is dropped
 
   let openSwipeId       = null; // id of the currently swiped-open row, if any
   let pressState        = null;
   let longPressTimer    = null;
   let dragState         = null;
+  let settleTimer       = null; // pending post-drop commit; cancelled by re-grabbing the same row mid-settle
   let suppressClick     = false;
   let highlightedDropEl = null; // category chip/title currently hovered while dragging
 
@@ -1346,6 +1349,17 @@
       e.preventDefault();
     }
   }, true);
+
+  // Belt-and-suspenders on top of the CSS user-select:none above: on real
+  // iOS Safari, a sustained hold can still visually kick off native text
+  // selection (most reliably on a short, isolated run like the category
+  // label) even though user-select says it isn't selectable. selectstart
+  // fires right as that's about to happen, so canceling it here stops it
+  // outright — the CSS alone wasn't enough on-device.
+  taskListEl.addEventListener('selectstart', e => {
+    if (e.target.closest('.edit-input')) return; // editing still needs real text selection
+    e.preventDefault();
+  });
 
   taskListEl.addEventListener('pointerdown', e => {
     suppressClick = false;
@@ -1475,6 +1489,9 @@
     if (!pressState || pressState.mode !== null) return;
     pressState.mode = 'drag';
     openSwipeId = null; // this row can't still be "open" once it's being dragged
+    // Re-grabbing a row before its previous drop finished settling should
+    // start clean, not race with that drop's still-pending commit/render.
+    clearTimeout(settleTimer);
 
     const wrapper = pressState.wrapper;
     pressState.row.setPointerCapture(pressState.pointerId);
@@ -1494,12 +1511,20 @@
     // which would make elementFromPoint find itself instead of the chip/
     // header actually being hovered — so it's excluded from hit-testing.
     wrapper.style.pointerEvents = 'none';
+
+    // A quick pop on pickup — the "grabbed it" feedback native drag
+    // reordering (Shortcuts, Home Screen icons) gives instantly.
+    wrapper.style.transition = `transform ${PICKUP_MS}ms ease`;
+    wrapper.style.transform  = 'scale(1.025)';
   }
 
   function onDragMove(e) {
     if (!dragState) return;
     const dy = e.clientY - dragState.startY;
-    dragState.wrapper.style.transform = `translateY(${dy}px)`;
+    // No transition here — the row should track the finger 1:1 with no lag.
+    // Only the pickup pop and the drop settle (below) animate.
+    dragState.wrapper.style.transition = 'none';
+    dragState.wrapper.style.transform  = `translateY(${dy}px) scale(1.025)`;
 
     // Dragging onto a category chip or the title area re-files the task
     // there instead of reordering it — check that before the reorder math.
@@ -1536,26 +1561,39 @@
 
   function onDragEnd() {
     if (!dragState) return;
-    const { wrapper, wrappers, startIndex, currentIndex, visibleIds, dropTarget } = dragState;
+    const { wrapper, wrappers, startIndex, currentIndex, itemHeight, visibleIds, dropTarget } = dragState;
 
-    // Listener cleanup for pointermove/pointerup/pointercancel happens in
-    // onPressEnd (the function actually attached to the row) — this only
-    // undoes the drag-specific visuals and commits the result.
-    wrappers.forEach(w => {
-      w.style.transition = '';
-      w.style.transform  = '';
-    });
-    wrapper.classList.remove('dragging');
-    wrapper.style.pointerEvents = '';
     updateDropHighlight(null);
-    dragState = null;
+    dragState = null; // clear now so a fresh press elsewhere isn't blocked by the settle below
 
-    if (dropTarget !== undefined) {
-      assignTaskCategory(visibleIds[startIndex], dropTarget); // already re-renders
-    } else {
-      commitReorder(visibleIds, startIndex, currentIndex);
-      render();
-    }
+    // Ease the dragged row from wherever the finger left it into the gap its
+    // siblings already opened up for it. The siblings themselves are left
+    // exactly as onDragMove last shifted them — resetting them now, ahead of
+    // the dragged row catching up, would snap them back to their pre-drag
+    // spots while the dragged row is still animating toward a slot sized for
+    // the shifted layout, i.e. the two would visibly disagree for 160ms.
+    const finalY = dropTarget !== undefined ? 0 : (currentIndex - startIndex) * itemHeight;
+    wrapper.style.transition = `transform ${SETTLE_MS}ms ease`;
+    wrapper.style.transform  = `translateY(${finalY}px) scale(1)`;
+
+    // A plain timeout, not transitionend, drives the commit: dropping a row
+    // back exactly where it started wouldn't change these style values, so
+    // transitionend would never fire and everything would stay stuck mid-drag.
+    settleTimer = setTimeout(() => {
+      wrappers.forEach(w => {
+        w.style.transition = '';
+        w.style.transform  = '';
+      });
+      wrapper.classList.remove('dragging');
+      wrapper.style.pointerEvents = '';
+
+      if (dropTarget !== undefined) {
+        assignTaskCategory(visibleIds[startIndex], dropTarget); // already re-renders
+      } else {
+        commitReorder(visibleIds, startIndex, currentIndex);
+        render();
+      }
+    }, SETTLE_MS);
   }
 
   // ── Offline detection ─────────────────────────────────────────────────
