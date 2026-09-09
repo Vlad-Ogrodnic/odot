@@ -1232,7 +1232,7 @@
 
   function renderTitleGroup() {
     if (currentCategoryId === null) {
-      return `<h1 class="app-title">Tasks v10</h1>`;
+      return `<h1 class="app-title">Tasks v11</h1>`;
     }
     const cat   = categories.find(c => c.id === currentCategoryId);
     const name  = cat ? escHtml(cat.name) : 'Category';
@@ -1362,6 +1362,11 @@
   });
 
   taskListEl.addEventListener('pointerdown', e => {
+    // Actively editing — this is a real text field, let it handle its own
+    // touch behavior (cursor placement, native select-word/select-all)
+    // undisturbed rather than arming the row-press machinery under it.
+    if (e.target.closest('.edit-input')) return;
+
     suppressClick = false;
 
     const wrapperEl = e.target.closest('.task-item-wrapper');
@@ -1378,7 +1383,18 @@
     const row       = e.target.closest('.task-row');
 
     if (deleteBtn) return; // let its own onclick handle deletion
-    if (row) startPress(e, row);
+    if (row) {
+      // The forceful version of the selectstart fix below: this tells iOS
+      // outright not to run ANY of its own touch gesture handling on this
+      // touch — which is what actually arms the native long-press text
+      // selection, before selectstart (or anything else) gets a chance to
+      // fire. touch-action:pan-y on .task-row still independently guarantees
+      // real scrolling keeps working — touch-action is resolved ahead of
+      // and regardless of preventDefault, specifically so a JS handler can
+      // never accidentally block panning.
+      e.preventDefault();
+      startPress(e, row);
+    }
   });
 
   function closeSwipe() {
