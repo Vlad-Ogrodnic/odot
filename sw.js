@@ -11,7 +11,7 @@
 // the user clears Safari's website data).
 // ─────────────────────────────────────────────────────────────────────────────
 
-const CACHE_NAME = 'todo-app-v18';
+const CACHE_NAME = 'todo-app-v19';
 
 // All files that make up the app shell. Must be kept in sync with what's
 // actually in the project. If you add a new file (e.g. an icon PNG), add it
@@ -28,10 +28,15 @@ const ASSETS = [
 // Pre-cache all assets. If any file fails to cache, the install fails and the
 // old service worker (if any) keeps running. This prevents a broken offline
 // experience from shipping.
+//
+// `cache: 'reload'` bypasses the browser's HTTP cache. GitHub Pages sends
+// max-age=600, so without it a new SW installed within ~10 min of the previous
+// fetch could re-cache the *old* index.html under the new CACHE_NAME — leaving
+// the device stuck on the old build until the next version bump.
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(ASSETS))
+      .then(cache => cache.addAll(ASSETS.map(url => new Request(url, { cache: 'reload' }))))
       .then(() => self.skipWaiting()) // activate immediately, don't wait for tabs to close
   );
 });
