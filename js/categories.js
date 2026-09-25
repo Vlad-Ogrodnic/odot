@@ -67,9 +67,9 @@ function navigateUp() {
   settleNav(true, 0);
 }
 
-// Mirrors startEdit/commitEdit/cancelEdit's inline-swap pattern, so adding a
-// category feels like the same action as adding/editing a task instead of a
-// separate native-popup interaction.
+// An inline input swapped in place of the "+" button, so adding a category
+// feels like typing a task into the add field instead of a separate
+// native-popup interaction.
 function startAddCategory() {
   addingCategory = true;
   addingCategoryColor = '#4C6899'; // just a starting point — freely changeable before confirming

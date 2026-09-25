@@ -65,7 +65,7 @@
 
   </div><!-- /.page -->
 
-  <div class="settings-overlay" id="settingsOverlay" onclick="if(event.target===this) closeSettings()">
+  <div class="sheet-overlay" id="settingsOverlay" onclick="if(event.target===this) closeSettings()">
     <div class="settings-sheet">
       <div class="settings-header">
         <h2>Settings</h2>
@@ -96,6 +96,50 @@
     </div>
   </div>
 
+  <!-- Task details: opened by tapping a task's text (js/detail.js). Every
+       change saves as it's made — there's no Cancel. -->
+  <div class="sheet-overlay" id="detailOverlay" onclick="if(event.target===this) closeDetail()">
+    <div class="detail-sheet" id="detailSheet" role="dialog" aria-label="Task details">
+      <!-- Drag this strip down to dismiss, like a native iOS sheet. -->
+      <div class="detail-handle" id="detailHandle">
+        <div class="sheet-grabber"></div>
+        <div class="detail-topbar">
+          <button class="detail-done" onclick="closeDetail()">Done</button>
+        </div>
+      </div>
+      <div class="detail-body" id="detailBody">
+        <textarea class="detail-title" id="detailTitle" rows="1" maxlength="300"
+                  placeholder="Title" autocomplete="off" autocorrect="on" spellcheck="true"
+                  oninput="onDetailTitleInput()" onkeydown="onDetailTitleKeydown(event)"
+                  onblur="onDetailTitleBlur()"></textarea>
+        <textarea class="detail-notes" id="detailNotes" rows="3" maxlength="5000"
+                  placeholder="Notes" autocorrect="on" spellcheck="true"
+                  oninput="onDetailNotesInput()"></textarea>
+
+        <div class="detail-group">
+          <label class="settings-toggle">
+            <span class="settings-toggle-title">Date</span>
+            <input type="checkbox" class="switch" id="detailDateSwitch" onchange="setDetailHasDate(this.checked)">
+          </label>
+          <div class="detail-picker-row" id="detailDateRow">
+            <input type="date" class="detail-picker" id="detailDate" onchange="setDetailDate(this.value)">
+            <span class="detail-picker-hint" id="detailDateHint"></span>
+          </div>
+          <label class="settings-toggle" id="detailTimeToggle">
+            <span class="settings-toggle-title">Time</span>
+            <input type="checkbox" class="switch" id="detailTimeSwitch" onchange="setDetailHasTime(this.checked)">
+          </label>
+          <div class="detail-picker-row" id="detailTimeRow">
+            <input type="time" class="detail-picker" id="detailTime" onchange="setDetailTime(this.value)">
+          </div>
+        </div>
+
+        <div class="detail-info" id="detailInfo"></div>
+        <button class="detail-delete" onclick="deleteFromDetail()">Delete task</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Plain classic scripts, not ES modules, loaded in this order: they
        share one global scope (top-level functions and let/const are visible
        across files), which is what the inline onclick="" handlers above rely
@@ -109,6 +153,7 @@
   <script src="js/render.js"></script>
   <script src="js/gestures.js"></script>
   <script src="js/nav.js"></script>
+  <script src="js/detail.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

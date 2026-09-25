@@ -134,17 +134,10 @@ function render(root = document) {
              aria-label="Mark complete">
           <span class="checkmark">✓</span>
         </div>
-        ${editingId === task.id
-          ? `<input class="edit-input" id="edit-${task.id}" type="text" maxlength="300"
-                    value="${escAttr(task.text)}"
-                    autocomplete="off" autocorrect="on" spellcheck="true"
-                    onkeydown="if(event.key==='Enter'){this.blur();}else if(event.key==='Escape'){cancelEdit();}"
-                    onblur="commitEdit(${task.id})">`
-          : `<div class="task-main" onclick="startEdit(${task.id})">
-               <div class="task-text ${task.done ? 'done' : ''}">${escHtml(task.text)}</div>
-               ${renderTaskMeta(task)}
-             </div>`
-        }
+        <div class="task-main" onclick="openDetail(${task.id})">
+          <div class="task-text ${task.done ? 'done' : ''}">${escHtml(task.text)}</div>
+          ${renderTaskMeta(task)}
+        </div>
         ${renderCategoryLabel(task)}
       </div>
     </div>
@@ -153,7 +146,7 @@ function render(root = document) {
 
 function renderTitleGroup() {
   if (currentCategoryId === null) {
-    return `<h1 class="app-title">Tasks v21</h1>`;
+    return `<h1 class="app-title">Tasks v22</h1>`;
   }
   const cat   = categories.find(c => c.id === currentCategoryId);
   const name  = cat ? escHtml(cat.name) : 'Category';
@@ -204,37 +197,111 @@ function renderCategoryLabel(task) {
   return `<span class="category-label" style="color:${color}">${escHtml(name)}</span>`;
 }
 
-// The small line under a task's text. Only completion time for now; tasks
-// done before completedAt existed have none, so they show nothing rather
-// than a made-up time.
+// The small line under a task's text: when it's due (active tasks) or when
+// it was completed (done tasks — the due date no longer matters then), plus
+// a notes icon if it has notes. Tasks done before completedAt existed have
+// no completion time, so they show nothing rather than a made-up one.
+const ICON_CALENDAR = '<svg class="icon meta-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4.5" width="18" height="17" rx="2.5"/><path d="M16 2.5v4M8 2.5v4M3 10h18"/></svg>';
+const ICON_NOTES    = '<svg class="icon meta-icon" viewBox="0 0 24 24" aria-label="Has notes"><path d="M4 6h16M4 12h16M4 18h10"/></svg>';
+
 function renderTaskMeta(task) {
-  if (!settings.showCompletedAt || !task.done || !task.completedAt) return '';
-  const when = formatCompletedAt(task.completedAt);
-  return when ? `<div class="task-meta">Completed ${when}</div>` : '';
+  const items = [];
+  if (task.done) {
+    if (settings.showCompletedAt && task.completedAt) {
+      const when = formatCompletedAt(task.completedAt);
+      if (when) items.push(`<span class="meta-item">Completed ${when}</span>`);
+    }
+  } else {
+    const due = describeDue(task);
+    if (due) items.push(`<span class="meta-item${due.overdue ? ' overdue' : ''}">${ICON_CALENDAR}${due.label}</span>`);
+  }
+  if (task.notes) items.push(`<span class="meta-item">${ICON_NOTES}</span>`);
+  return items.length ? `<div class="task-meta">${items.join('')}</div>` : '';
+}
+
+// Month and day names are spelled out here instead of via toLocale*String,
+// which would follow the phone's language and mix it into this English UI.
+const MONTHS         = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const WEEKDAYS       = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const WEEKDAYS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+// Calendar days from `from` to `to` (positive when `to` is later), not
+// elapsed time / 24h — 23:50 yesterday is 1 day ago at 00:10 today.
+// Rounded because a DST switch makes one day 23 or 25 hours long.
+function calendarDayDiff(from, to) {
+  const dayStart = x => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  return Math.round((dayStart(to) - dayStart(from)) / (24 * 60 * 60 * 1000));
+}
+
+const pad2 = n => String(n).padStart(2, '0');
+const formatTime = d => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+
+// "12 Sep", plus the year once it's not the current one.
+function formatShortDate(d, now = new Date()) {
+  const date = `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+  return d.getFullYear() === now.getFullYear() ? date : `${date} ${d.getFullYear()}`;
+}
+
+// "25 Sep 2026, 14:03" — the unambiguous form, for the detail sheet's info.
+function formatDateTime(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}, ${formatTime(d)}`;
 }
 
 // "today, 14:32" / "yesterday, 09:05" / "Monday, 18:00" within the past
-// week, then "12 Sep" (plus the year once it's not this year). Month and
-// day names are spelled out here instead of via toLocale*String, which
-// would follow the phone's language and mix it into this English UI.
-const MONTHS   = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-
+// week, then "12 Sep".
 function formatCompletedAt(iso) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
+  const days = calendarDayDiff(d, new Date());
+  if (days === 0) return `today, ${formatTime(d)}`;
+  if (days === 1) return `yesterday, ${formatTime(d)}`;
+  if (days > 1 && days < 7) return `${WEEKDAYS[d.getDay()]}, ${formatTime(d)}`;
+  return formatShortDate(d);
+}
+
+// A due date is stored as a local calendar date "YYYY-MM-DD" (and an
+// optional "HH:MM"), never as an ISO timestamp — so "Friday" stays Friday
+// whatever timezone the phone is in. Built with new Date(y, m, d), because
+// new Date("YYYY-MM-DD") would parse it as UTC midnight and can land on the
+// previous day locally.
+const DUE_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+const DUE_TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+function parseDueDate(str) {
+  const m = DUE_DATE_RE.exec(str || '');
+  if (!m) return null;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  // Rejects impossible dates like "2026-02-31", which Date would otherwise
+  // quietly roll over into March.
+  return d.getMonth() === Number(m[2]) - 1 && d.getDate() === Number(m[3]) ? d : null;
+}
+
+function toDueDateString(d) {
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+
+// { label, overdue } for an active task's due date, or null if it has none.
+// "Today" / "Tomorrow" / "Yesterday"; weekday plus date within a week either
+// way ("Fri, 3 Oct"); further out just the date ("12 Oct"). " · 14:00"
+// appended when a time is set.
+function describeDue(task) {
+  const due = parseDueDate(task.dueDate);
+  if (!due) return null;
   const now  = new Date();
-  const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-  // Calendar-day difference, not elapsed/24h — 23:50 yesterday is
-  // "yesterday" at 00:10 today. Rounded because a DST switch makes one
-  // day 23 or 25 hours long.
-  const dayStart = x => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
-  const days = Math.round((dayStart(now) - dayStart(d)) / (24 * 60 * 60 * 1000));
-  if (days === 0) return `today, ${time}`;
-  if (days === 1) return `yesterday, ${time}`;
-  if (days > 1 && days < 7) return `${WEEKDAYS[d.getDay()]}, ${time}`;
-  const date = `${d.getDate()} ${MONTHS[d.getMonth()]}`;
-  return d.getFullYear() === now.getFullYear() ? date : `${date} ${d.getFullYear()}`;
+  const days = calendarDayDiff(now, due);
+  let label;
+  if (days === 0)               label = 'Today';
+  else if (days === 1)          label = 'Tomorrow';
+  else if (days === -1)         label = 'Yesterday';
+  else if (Math.abs(days) < 7)  label = `${WEEKDAYS_SHORT[due.getDay()]}, ${due.getDate()} ${MONTHS[due.getMonth()]}`;
+  else                          label = formatShortDate(due, now);
+  const time = DUE_TIME_RE.test(task.dueTime || '') ? task.dueTime : null;
+  if (time) label += ` · ${time}`;
+  // "HH:MM" strings compare correctly as plain strings (zero-padded, 24h).
+  const overdue = days < 0 || (days === 0 && time !== null && time < formatTime(now));
+  return { label, overdue };
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────
@@ -242,12 +309,4 @@ function escHtml(str) {
   const d = document.createElement('div');
   d.appendChild(document.createTextNode(str));
   return d.innerHTML;
-}
-
-function escAttr(str) {
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
 }

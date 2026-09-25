@@ -72,7 +72,6 @@ taskListEl.addEventListener('click', e => {
 // fires right as that's about to happen, so canceling it here stops it
 // outright — the CSS alone wasn't enough on-device.
 taskListEl.addEventListener('selectstart', e => {
-  if (e.target.closest('.edit-input')) return; // editing still needs real text selection
   e.preventDefault();
 });
 
@@ -101,11 +100,6 @@ document.addEventListener('touchmove', e => {
 }, { passive: false });
 
 taskListEl.addEventListener('pointerdown', e => {
-  // Actively editing — this is a real text field, let it handle its own
-  // touch behavior (cursor placement, native select-word/select-all)
-  // undisturbed rather than arming the row-press machinery under it.
-  if (e.target.closest('.edit-input')) return;
-
   suppressClick = false;
 
   const wrapperEl = e.target.closest('.task-item-wrapper');

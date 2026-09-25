@@ -166,8 +166,15 @@ input, textarea {
   flex-shrink: 0;
 }
 
-/* ── Settings sheet ──────────────────────────────── */
-.settings-overlay {
+/* `hidden` must win over any display: set by a class (e.g. .settings-toggle's
+   flex), or toggling it from JS silently does nothing. */
+[hidden] {
+  display: none !important;
+}
+
+/* ── Sheets (settings, task details) ──────────────── */
+/* The dimmed backdrop a sheet slides up over. Tapping it closes the sheet. */
+.sheet-overlay {
   display: none;
   position: fixed;
   inset: 0;
@@ -176,9 +183,11 @@ input, textarea {
   align-items: flex-end;
 }
 
-.settings-overlay.visible {
+.sheet-overlay.visible {
   display: flex;
 }
+
+/* ── Settings sheet ──────────────────────────────── */
 
 .settings-sheet {
   background: var(--sheet);
@@ -213,6 +222,160 @@ input, textarea {
   font-size: 18px;
   padding: 6px;
   cursor: pointer;
+}
+
+/* ── Task detail sheet ───────────────────────────── */
+/* Nearly full height, like iOS's large sheet: anchored near the top, so the
+   title and notes (the fields that bring up the keyboard) sit high on the
+   screen, clear of where the keyboard comes up from the bottom. */
+.detail-sheet {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: calc(100% - env(safe-area-inset-top) - 12px);
+  background: var(--sheet);
+  border-radius: 14px 14px 0 0;
+  animation: slideUp 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* Grabber + Done. The drag-to-dismiss surface: touch-action:none so a
+   vertical drag here is never taken as a scroll. */
+.detail-handle {
+  flex-shrink: 0;
+  padding: 7px 14px 0;
+  touch-action: none;
+}
+
+.sheet-grabber {
+  width: 36px;
+  height: 5px;
+  margin: 0 auto;
+  border-radius: 3px;
+  background: var(--text-dimmer);
+  opacity: 0.6;
+}
+
+.detail-topbar {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.detail-done {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-family: inherit;
+  font-size: 17px;
+  font-weight: 600;
+  padding: 4px 6px 6px;
+  cursor: pointer;
+}
+
+/* Scrolls on its own when content outgrows the sheet; `contain` keeps that
+   scroll from chaining through to the page behind. */
+.detail-body {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 20px calc(28px + env(safe-area-inset-bottom));
+}
+
+.detail-title,
+.detail-notes {
+  display: block;
+  width: 100%;
+  font-family: inherit;
+  color: var(--text);
+  background: transparent;
+  border: none;
+  outline: none;
+  resize: none;
+  -webkit-appearance: none;
+}
+
+/* Grows with the text (autosize() in js/detail.js) instead of scrolling. */
+.detail-title {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  padding: 0;
+  overflow: hidden;
+}
+
+.detail-notes {
+  min-height: 92px;
+  margin-top: 14px;
+  padding: 11px 13px;
+  font-size: 16px; /* 16px minimum: anything smaller makes iOS zoom the page on focus */
+  line-height: 1.45;
+  background: var(--track);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.detail-title::placeholder,
+.detail-notes::placeholder {
+  color: var(--text-dimmer);
+}
+
+.detail-group {
+  margin-top: 22px;
+  border-bottom: 1px solid var(--sep);
+}
+
+.detail-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 4px 13px;
+}
+
+/* The native date/time input, kept native (tapping it opens iOS's own
+   calendar / time wheel) and just dressed as a pill in the accent color. */
+.detail-picker {
+  font-family: inherit;
+  font-size: 16px;
+  color: var(--accent);
+  background: var(--track);
+  border: none;
+  border-radius: 9px;
+  padding: 7px 12px;
+  min-height: 36px;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.detail-picker::-webkit-date-and-time-value {
+  text-align: left;
+}
+
+.detail-picker-hint {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.detail-info {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-dim);
+  padding: 14px 4px;
+}
+
+.detail-delete {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-top: 1px solid var(--sep);
+  color: var(--danger);
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  padding: 16px 4px;
+  cursor: pointer;
+  -webkit-appearance: none;
 }
 
 .settings-action {
@@ -676,27 +839,6 @@ input, textarea {
   color: var(--text-dimmer);
 }
 
-/* Inline edit input, replaces .task-text while editing — explicitly
-   selectable again, since it sits inside .task-row which turns
-   selection off for everything else. */
-.edit-input {
-  flex: 1;
-  min-width: 0;
-  font-size: 16.5px;
-  line-height: 1.4;
-  font-family: inherit;
-  -webkit-user-select: text;
-  user-select: text;
-  -webkit-touch-callout: default;
-  color: var(--text);
-  background: transparent;
-  border: none;
-  border-bottom: 1.5px solid var(--accent);
-  outline: none;
-  padding: 0 0 2px;
-  -webkit-appearance: none;
-}
-
 /* Circular checkbox */
 .check-circle {
   width: 23px;
@@ -751,10 +893,35 @@ input, textarea {
   min-width: 0;
 }
 
+/* Items (due date, completion time, notes icon) sit side by side, and wrap
+   as whole items rather than mid-label on a narrow row. */
 .task-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 10px;
   font-size: 13px;
   color: var(--text-dim); /* not --text-dimmer: too faint to read at 13px in dark mode */
   margin-top: 3px;
+}
+
+.meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.meta-item.overdue {
+  color: var(--warning);
+  font-weight: 600;
+}
+
+.meta-icon {
+  width: 13px;
+  height: 13px;
+  stroke-width: 2;
+  flex-shrink: 0;
 }
 
 /* ── Empty state ─────────────────────────────────── */

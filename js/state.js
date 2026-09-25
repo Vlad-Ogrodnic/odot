@@ -5,7 +5,6 @@
 // ── State ──────────────────────────────────────────────────────────────
 let tasks  = [];
 let filter = 'all';
-let editingId = null;
 let categories = [];
 let currentCategoryId = null; // null = root/"All"
 let addingCategory = false;

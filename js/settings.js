@@ -32,10 +32,9 @@ function daysSinceLastBackup() {
   if (!lastBackupAt) return null;
   const then = new Date(lastBackupAt);
   if (Number.isNaN(then.getTime())) return null;
-  // Calendar days, as in formatCompletedAt: last night at 23:50 is "yesterday".
-  const dayStart = d => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  // Floored at 0 so a phone clock set back in time can't produce "-1 days ago".
-  return Math.max(0, Math.round((dayStart(new Date()) - dayStart(then)) / (24 * 60 * 60 * 1000)));
+  // Calendar days (last night at 23:50 is "yesterday"), floored at 0 so a
+  // phone clock set back in time can't produce "-1 days ago".
+  return Math.max(0, calendarDayDiff(then, new Date()));
 }
 
 // Only once there's something worth losing.
@@ -200,6 +199,12 @@ function handleImportFile(event) {
         done:      !!item.done,
         createdAt: typeof item.createdAt === 'string' ? item.createdAt : new Date().toISOString(),
         ...(typeof item.completedAt === 'string' ? { completedAt: item.completedAt } : {}),
+        // Detail-sheet fields, each validated to the exact shape the app
+        // writes; anything else is dropped rather than half-trusted. A time
+        // is only kept alongside a valid date, as the app itself does.
+        ...(typeof item.notes === 'string' && item.notes.trim() ? { notes: item.notes.slice(0, 5000) } : {}),
+        ...(parseDueDate(item.dueDate) ? { dueDate: item.dueDate } : {}),
+        ...(parseDueDate(item.dueDate) && DUE_TIME_RE.test(item.dueTime || '') ? { dueTime: item.dueTime } : {}),
         categoryId,
       });
       added++;
