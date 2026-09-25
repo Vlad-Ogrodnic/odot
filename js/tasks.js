@@ -1,5 +1,6 @@
-// Task operations (add/toggle/delete/reorder). Editing a task's details
-// lives in js/detail.js.
+// Task operations (add/toggle/delete/reorder) and editing a task's text in
+// place. The detail sheet (used instead when the "Task details" setting is
+// on) lives in js/detail.js.
 //
 // Classic script, not a module: see the note in index.html.
 
@@ -63,4 +64,42 @@ function commitReorder(visibleIds, fromIndex, toIndex) {
   let cursor = 0;
   tasks = tasks.map(t => visibleSet.has(t.id) ? byId.get(newOrder[cursor++]) : t);
   save();
+}
+
+// ── Tapping a task's text ──────────────────────────────────────────────
+// Opens the detail sheet, or — with the "Task details" setting off, for
+// anyone who'd rather keep tasks simple — edits the text right in the row.
+function onTaskTextTap(id) {
+  if (settings.taskDetails) openDetail(id);
+  else startEdit(id);
+}
+
+// ── Editing in place ───────────────────────────────────────────────────
+function startEdit(id) {
+  editingId = id;
+  render();
+  const input = document.getElementById(`edit-${id}`);
+  if (input) {
+    input.focus();
+    const len = input.value.length;
+    input.setSelectionRange(len, len); // cursor at end, not select-all — editing should extend text, not wipe it
+  }
+}
+
+function commitEdit(id) {
+  const input = document.getElementById(`edit-${id}`);
+  if (!input) return; // already committed/cancelled
+  const value = input.value.trim();
+  const task  = tasks.find(t => t.id === id);
+  if (task && value) {
+    task.text = value;
+    save();
+  }
+  editingId = null;
+  render();
+}
+
+function cancelEdit() {
+  editingId = null;
+  render();
 }

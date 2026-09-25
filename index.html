@@ -88,6 +88,14 @@
         <input type="checkbox" class="switch" id="settingShowCompletedAt"
                onchange="setSetting('showCompletedAt', this.checked)">
       </label>
+      <label class="settings-toggle">
+        <span>
+          <span class="settings-toggle-title">Task details</span>
+          <span class="settings-toggle-sub">Tap a task for notes and due date. Off: tap to edit its text</span>
+        </span>
+        <input type="checkbox" class="switch" id="settingTaskDetails"
+               onchange="setSetting('taskDetails', this.checked)">
+      </label>
       <div class="settings-section-label">Backup</div>
       <div class="backup-status" id="backupStatus"></div>
       <button class="settings-action" onclick="exportTasks()">Export tasks</button>

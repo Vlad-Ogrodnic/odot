@@ -134,10 +134,17 @@ function render(root = document) {
              aria-label="Mark complete">
           <span class="checkmark">✓</span>
         </div>
-        <div class="task-main" onclick="openDetail(${task.id})">
-          <div class="task-text ${task.done ? 'done' : ''}">${escHtml(task.text)}</div>
-          ${renderTaskMeta(task)}
-        </div>
+        ${editingId === task.id
+          ? `<input class="edit-input" id="edit-${task.id}" type="text" maxlength="300"
+                    value="${escAttr(task.text)}"
+                    autocomplete="off" autocorrect="on" spellcheck="true"
+                    onkeydown="if(event.key==='Enter'){this.blur();}else if(event.key==='Escape'){cancelEdit();}"
+                    onblur="commitEdit(${task.id})">`
+          : `<div class="task-main" onclick="onTaskTextTap(${task.id})">
+               <div class="task-text ${task.done ? 'done' : ''}">${escHtml(task.text)}</div>
+               ${renderTaskMeta(task)}
+             </div>`
+        }
         ${renderCategoryLabel(task)}
       </div>
     </div>
@@ -146,7 +153,7 @@ function render(root = document) {
 
 function renderTitleGroup() {
   if (currentCategoryId === null) {
-    return `<h1 class="app-title">Tasks v22</h1>`;
+    return `<h1 class="app-title">Tasks v23</h1>`;
   }
   const cat   = categories.find(c => c.id === currentCategoryId);
   const name  = cat ? escHtml(cat.name) : 'Category';
@@ -309,4 +316,12 @@ function escHtml(str) {
   const d = document.createElement('div');
   d.appendChild(document.createTextNode(str));
   return d.innerHTML;
+}
+
+function escAttr(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }

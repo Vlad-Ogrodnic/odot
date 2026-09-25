@@ -39,6 +39,7 @@ function openDetail(id) {
 
   resetSheetStyles();
   detailOverlayEl.classList.add('visible');
+  lockPageScroll(); // see js/settings.js — nothing behind the sheet scrolls while it's up
   detailBodyEl.scrollTop = 0;
   // Only measurable once visible (a display:none textarea has no height).
   autosize(detailTitleEl);
@@ -69,6 +70,7 @@ function closeDetail(velocity = 0) {
   setTimeout(() => {
     detailOverlayEl.classList.remove('visible');
     resetSheetStyles();
+    unlockPageScroll(); // only now: the page must not jump while the sheet is still sliding off it
     detailId = null;
     detailClosing = false;
   }, ms);
@@ -241,31 +243,69 @@ function deleteFromDetail() {
   deleteTask(id);
 }
 
-// ── Drag the handle down to dismiss ────────────────────────────────────
-// The handle strip (grabber + Done) is touch-action:none, so a vertical
-// drag there is always ours — never a scroll of the sheet's body or the page.
-detailHandleEl.addEventListener('pointerdown', e => {
-  if (detailId === null || detailClosing || e.target.closest('button')) return;
+// ── Drag down to dismiss ───────────────────────────────────────────────
+// From anywhere on the sheet, as with iOS's own sheets — not just the strip
+// at the top, which is a stretch for a thumb. A touch that starts moving
+// down while the sheet's content is scrolled to the top drags the sheet;
+// anything else (content scrolled down, moving up, sideways) is left as a
+// normal scroll of that content. The top strip (grabber + Done) is
+// touch-action:none and drags straight away, with no need to decide.
+// Not from a field that's being typed in: a drag there moves the cursor.
+const SHEET_ARM = 6; // px of movement before deciding what a touch on the body is
+
+detailSheetEl.addEventListener('pointerdown', e => {
+  if (detailId === null || detailClosing || sheetDrag) return;
+  if (e.target.closest('button')) return;
+  const field = e.target.closest('input, textarea');
+  if (field && field === document.activeElement) return;
   sheetDrag = {
     pointerId: e.pointerId,
+    startX:    e.clientX,
     startY:    e.clientY,
     height:    detailSheetEl.offsetHeight,
-    moved:     false,
+    active:    false,
     samples:   [{ t: e.timeStamp, y: e.clientY }],
   };
-  detailHandleEl.setPointerCapture(e.pointerId);
-  detailSheetEl.style.transition   = 'none';
-  detailOverlayEl.style.transition = 'none';
+  if (detailHandleEl.contains(e.target)) beginSheetDrag(e);
 });
 
-detailHandleEl.addEventListener('pointermove', e => {
+function beginSheetDrag(e) {
+  const d = sheetDrag;
+  d.active = true;
+  d.startY = e.clientY; // measured from here, so the sheet doesn't jump by the arming distance
+  detailSheetEl.setPointerCapture(e.pointerId);
+  detailSheetEl.style.transition   = 'none';
+  detailOverlayEl.style.transition = 'none';
+  if (detailSheetEl.contains(document.activeElement)) document.activeElement.blur(); // keyboard away, as iOS does
+}
+
+// A drag that ended on a switch's label (or anything clickable) mustn't
+// also count as a tap on it.
+let sheetClickGuardUntil = 0;
+detailSheetEl.addEventListener('click', e => {
+  if (performance.now() < sheetClickGuardUntil) {
+    e.stopPropagation();
+    e.preventDefault();
+  }
+}, true);
+
+detailSheetEl.addEventListener('pointermove', e => {
   const d = sheetDrag;
   if (!d || e.pointerId !== d.pointerId) return;
-  const dy = Math.max(0, e.clientY - d.startY); // down only; the sheet is already fully open
-  if (!d.moved && dy > 4) {
-    d.moved = true;
-    if (detailSheetEl.contains(document.activeElement)) document.activeElement.blur(); // keyboard away, as iOS does
+
+  if (!d.active) {
+    const dx = e.clientX - d.startX;
+    const dy = e.clientY - d.startY;
+    if (Math.abs(dx) < SHEET_ARM && Math.abs(dy) < SHEET_ARM) return;
+    if (dy > 0 && dy > Math.abs(dx) && detailBodyEl.scrollTop <= 0) {
+      beginSheetDrag(e);
+    } else {
+      sheetDrag = null; // scrolling the sheet's content — native, not ours
+      return;
+    }
   }
+
+  const dy = Math.max(0, e.clientY - d.startY); // down only; the sheet is already fully open
   detailSheetEl.style.transform = `translateY(${dy}px)`;
   // The backdrop lightens as the sheet goes, reaching clear at the bottom.
   detailOverlayEl.style.backgroundColor = `rgba(0, 0, 0, ${0.5 * (1 - dy / d.height)})`;
@@ -277,6 +317,9 @@ function endSheetDrag(e) {
   const d = sheetDrag;
   if (!d || e.pointerId !== d.pointerId) return;
   sheetDrag = null;
+  if (!d.active) return; // a tap — leave it to the click
+
+  sheetClickGuardUntil = performance.now() + 250;
 
   const dy     = sheetOffset();
   const recent = d.samples.filter(p => e.timeStamp - p.t <= SHEET_SAMPLE_MS);
@@ -297,5 +340,5 @@ function endSheetDrag(e) {
   detailOverlayEl.style.backgroundColor = '';
 }
 
-detailHandleEl.addEventListener('pointerup', endSheetDrag);
-detailHandleEl.addEventListener('pointercancel', endSheetDrag);
+detailSheetEl.addEventListener('pointerup', endSheetDrag);
+detailSheetEl.addEventListener('pointercancel', endSheetDrag);

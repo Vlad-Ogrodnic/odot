@@ -5,6 +5,7 @@
 // ── State ──────────────────────────────────────────────────────────────
 let tasks  = [];
 let filter = 'all';
+let editingId = null; // task being edited in place (only with the taskDetails setting off)
 let categories = [];
 let currentCategoryId = null; // null = root/"All"
 let addingCategory = false;
@@ -28,6 +29,7 @@ const SETTINGS_KEY   = 'todo_settings_v1';
 const DEFAULT_SETTINGS = {
   rootShowsAll:    true, // main screen shows every task (false: only uncategorized ones)
   showCompletedAt: true, // done tasks show when they were completed
+  taskDetails:     true, // tapping a task's text opens its detail sheet (false: edits the text in place)
 };
 let settings = { ...DEFAULT_SETTINGS };
 

@@ -839,6 +839,27 @@ input, textarea {
   color: var(--text-dimmer);
 }
 
+/* Inline edit input (with the "Task details" setting off), replaces
+   .task-main while editing — explicitly selectable again, since it sits
+   inside .task-row which turns selection off for everything else. */
+.edit-input {
+  flex: 1;
+  min-width: 0;
+  font-size: 16.5px;
+  line-height: 1.4;
+  font-family: inherit;
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+  color: var(--text);
+  background: transparent;
+  border: none;
+  border-bottom: 1.5px solid var(--accent);
+  outline: none;
+  padding: 0 0 2px;
+  -webkit-appearance: none;
+}
+
 /* Circular checkbox */
 .check-circle {
   width: 23px;

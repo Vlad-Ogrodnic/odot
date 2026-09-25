@@ -72,6 +72,7 @@ taskListEl.addEventListener('click', e => {
 // fires right as that's about to happen, so canceling it here stops it
 // outright — the CSS alone wasn't enough on-device.
 taskListEl.addEventListener('selectstart', e => {
+  if (e.target.closest('.edit-input')) return; // editing in place still needs real text selection
   e.preventDefault();
 });
 
@@ -95,11 +96,16 @@ document.addEventListener('selectionchange', () => {
 // gesture state below is already up to date by the time this runs.
 document.addEventListener('touchmove', e => {
   const mode = pressState?.mode;
-  const ours = mode === 'drag' || mode === 'swipe' || backSwipe?.active;
+  const ours = mode === 'drag' || mode === 'swipe' || backSwipe?.active || sheetDrag?.active;
   if (ours && e.cancelable) e.preventDefault();
 }, { passive: false });
 
 taskListEl.addEventListener('pointerdown', e => {
+  // Editing in place — this is a real text field, let it handle its own
+  // touch behavior (cursor placement, native select-word/select-all)
+  // undisturbed rather than arming the row-press machinery under it.
+  if (e.target.closest('.edit-input')) return;
+
   suppressClick = false;
 
   const wrapperEl = e.target.closest('.task-item-wrapper');

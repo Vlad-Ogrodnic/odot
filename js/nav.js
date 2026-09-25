@@ -43,9 +43,9 @@ document.addEventListener('pointerdown', e => {
   if (currentCategoryId === null || nav || backSwipe) return;
   // Busy with something else that a sideways swipe would clash with — a
   // held row, an open delete button (a press anywhere just closes it
-  // first), a category name being typed, or a sheet (settings, task
-  // details) open over the page.
-  if (dragState || openSwipeId !== null || addingCategory) return;
+  // first), text being typed (a task edited in place, a category name), or
+  // a sheet (settings, task details) open over the page.
+  if (dragState || openSwipeId !== null || editingId !== null || addingCategory) return;
   if (e.target.closest('input, textarea, .sheet-overlay')) return;
 
   backSwipe = { pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, originX: 0, active: false, samples: [] };

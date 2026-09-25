@@ -6,8 +6,10 @@
 function openSettings() {
   document.getElementById('settingRootShowsAll').checked    = settings.rootShowsAll;
   document.getElementById('settingShowCompletedAt').checked = settings.showCompletedAt;
+  document.getElementById('settingTaskDetails').checked     = settings.taskDetails;
   renderBackupStatus();
   document.getElementById('settingsOverlay').classList.add('visible');
+  lockPageScroll();
 }
 
 function setSetting(key, value) {
@@ -18,6 +20,34 @@ function setSetting(key, value) {
 
 function closeSettings() {
   document.getElementById('settingsOverlay').classList.remove('visible');
+  unlockPageScroll();
+}
+
+// While a sheet is open the page behind it must not scroll — neither from
+// a touch on the backdrop nor from a sheet's own scroll chaining through to
+// it (overscroll-behavior only helps when the sheet itself has something to
+// scroll). overflow:hidden on body isn't reliable on iOS, so the page is
+// pinned in place with position:fixed at its current offset instead, and
+// put back exactly there afterwards.
+let lockedScrollY = null;
+
+function lockPageScroll() {
+  if (lockedScrollY !== null) return;
+  lockedScrollY = window.scrollY;
+  document.body.style.position = 'fixed';
+  document.body.style.top      = `-${lockedScrollY}px`;
+  document.body.style.left     = '0';
+  document.body.style.right    = '0';
+}
+
+function unlockPageScroll() {
+  if (lockedScrollY === null) return;
+  document.body.style.position = '';
+  document.body.style.top      = '';
+  document.body.style.left     = '';
+  document.body.style.right    = '';
+  window.scrollTo(0, lockedScrollY);
+  lockedScrollY = null;
 }
 
 // ── Backup reminder ────────────────────────────────────────────────────
