@@ -145,8 +145,10 @@ function setDetailHasDate(on) {
   if (on) {
     task.dueDate = toDueDateString(new Date()); // starts on today, like Reminders
   } else {
+    // A time or a repeat only exist alongside a date.
     delete task.dueDate;
     delete task.dueTime;
+    delete task.repeat;
   }
   save();
   renderDetailDue();
@@ -157,10 +159,12 @@ function setDetailDate(value) {
   if (!task) return;
   if (parseDueDate(value)) {
     task.dueDate = value;
+    syncRepeatAnchor(task); // "monthly" now means monthly on this new day
   } else {
     // The native picker's own Clear/Reset leaves an empty value.
     delete task.dueDate;
     delete task.dueTime;
+    delete task.repeat;
   }
   save();
   renderDetailDue();
@@ -205,6 +209,47 @@ function renderDetailDue() {
     document.getElementById('detailDateHint').textContent = relativeDayHint(due);
   }
   if (hasTime) document.getElementById('detailTime').value = task.dueTime;
+
+  const preset = due ? repeatPresetKey(task.repeat) : 'never';
+  document.getElementById('detailRepeatRow').hidden       = !due;
+  document.getElementById('detailRepeat').value           = preset;
+  document.getElementById('detailRepeatCustomRow').hidden = preset !== 'custom';
+  if (preset === 'custom') {
+    document.getElementById('detailRepeatEvery').value = task.repeat.every;
+    document.getElementById('detailRepeatUnit').value  = task.repeat.unit;
+  }
+}
+
+// ── Repeat ─────────────────────────────────────────────────────────────
+// Rules and next-occurrence math live in js/recurrence.js.
+function setDetailRepeat(value) {
+  const task = detailTask();
+  if (!task || !task.dueDate) return;
+  if (value === 'never') {
+    delete task.repeat;
+  } else if (value === 'custom') {
+    // Keep an existing custom rule; otherwise start from something that
+    // isn't a preset, so the custom fields have a reason to show.
+    if (repeatPresetKey(task.repeat) !== 'custom') task.repeat = { every: 2, unit: 'day' };
+  } else {
+    task.repeat = { ...REPEAT_PRESETS[value] };
+  }
+  syncRepeatAnchor(task);
+  save();
+  renderDetailDue();
+  renderDetailInfo();
+}
+
+function setDetailRepeatCustom() {
+  const task = detailTask();
+  if (!task || !task.dueDate) return;
+  const every = Math.min(365, Math.max(1, parseInt(document.getElementById('detailRepeatEvery').value, 10) || 1));
+  const unit  = document.getElementById('detailRepeatUnit').value;
+  task.repeat = { every, unit };
+  syncRepeatAnchor(task);
+  save();
+  renderDetailDue(); // "every 1 week" is just Weekly — the picker follows along
+  renderDetailInfo();
 }
 
 // Next to the picker (which shows the date in the phone's own format):
@@ -230,6 +275,12 @@ function renderDetailInfo() {
   if (created) lines.push(`Created ${created}`);
   const completed = task.done && task.completedAt ? formatDateTime(task.completedAt) : '';
   if (completed) lines.push(`Completed ${completed}`);
+  // A repeating task's rule, and its track record across all its instances
+  // once there is one.
+  const rule  = describeRepeat(task.repeat);
+  const stats = task.seriesId != null ? seriesStats(task.seriesId) : null;
+  const track = stats ? `done ${stats.done} of ${stats.expected} times since ${formatShortDate(stats.since)}` : '';
+  if (rule || track) lines.push([rule, track].filter(Boolean).join(' · '));
   document.getElementById('detailInfo').innerHTML = lines.map(l => `<div>${l}</div>`).join('');
 }
 
@@ -256,7 +307,7 @@ const SHEET_ARM = 6; // px of movement before deciding what a touch on the body 
 detailSheetEl.addEventListener('pointerdown', e => {
   if (detailId === null || detailClosing || sheetDrag) return;
   if (e.target.closest('button')) return;
-  const field = e.target.closest('input, textarea');
+  const field = e.target.closest('input, textarea, select');
   if (field && field === document.activeElement) return;
   sheetDrag = {
     pointerId: e.pointerId,

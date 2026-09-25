@@ -96,6 +96,14 @@
         <input type="checkbox" class="switch" id="settingTaskDetails"
                onchange="setSetting('taskDetails', this.checked)">
       </label>
+      <label class="settings-toggle">
+        <span>
+          <span class="settings-toggle-title">Group by due date</span>
+          <span class="settings-toggle-sub">Overdue, Today, Tomorrow… Reordering by drag is paused while on</span>
+        </span>
+        <input type="checkbox" class="switch" id="settingGroupByDue"
+               onchange="setSetting('groupByDue', this.checked)">
+      </label>
       <div class="settings-section-label">Backup</div>
       <div class="backup-status" id="backupStatus"></div>
       <button class="settings-action" onclick="exportTasks()">Export tasks</button>
@@ -140,6 +148,30 @@
           <div class="detail-picker-row" id="detailTimeRow">
             <input type="time" class="detail-picker" id="detailTime" onchange="setDetailTime(this.value)">
           </div>
+          <!-- Native <select>s: iOS shows its own wheel picker. -->
+          <label class="settings-toggle" id="detailRepeatRow">
+            <span class="settings-toggle-title">Repeat</span>
+            <select class="detail-picker" id="detailRepeat" onchange="setDetailRepeat(this.value)">
+              <option value="never">Never</option>
+              <option value="daily">Daily</option>
+              <option value="weekdays">Weekdays</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+              <option value="yearly">Yearly</option>
+              <option value="custom">Custom…</option>
+            </select>
+          </label>
+          <div class="detail-picker-row" id="detailRepeatCustomRow">
+            <span class="detail-picker-hint">Every</span>
+            <input type="number" inputmode="numeric" min="1" max="365" class="detail-picker detail-number"
+                   id="detailRepeatEvery" onchange="setDetailRepeatCustom()">
+            <select class="detail-picker" id="detailRepeatUnit" onchange="setDetailRepeatCustom()">
+              <option value="day">days</option>
+              <option value="week">weeks</option>
+              <option value="month">months</option>
+              <option value="year">years</option>
+            </select>
+          </div>
         </div>
 
         <div class="detail-info" id="detailInfo"></div>
@@ -159,6 +191,7 @@
   <script src="js/categories.js"></script>
   <script src="js/settings.js"></script>
   <script src="js/render.js"></script>
+  <script src="js/recurrence.js"></script>
   <script src="js/gestures.js"></script>
   <script src="js/nav.js"></script>
   <script src="js/detail.js"></script>

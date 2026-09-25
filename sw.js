@@ -11,7 +11,7 @@
 // the user clears Safari's website data).
 // ─────────────────────────────────────────────────────────────────────────────
 
-const CACHE_NAME = 'todo-app-v23';
+const CACHE_NAME = 'todo-app-v25';
 
 // All files that make up the app shell. Must be kept in sync with what's
 // actually in the project. If you add a new file (e.g. an icon PNG, or a new
@@ -26,6 +26,7 @@ const ASSETS = [
   './js/categories.js',
   './js/settings.js',
   './js/render.js',
+  './js/recurrence.js',
   './js/gestures.js',
   './js/nav.js',
   './js/detail.js',

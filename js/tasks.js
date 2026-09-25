@@ -36,7 +36,12 @@ function toggleTask(id) {
   const task = tasks.find(t => t.id === id);
   if (!task) return;
   task.done = !task.done;
-  if (task.done) task.completedAt = new Date().toISOString();
+  if (task.done) {
+    task.completedAt = new Date().toISOString();
+    // A repeating task hands over to its next occurrence (js/recurrence.js);
+    // unchecking this one later leaves that next one in place.
+    if (task.repeat) spawnNextOccurrence(task);
+  }
   save();
   render();
 }

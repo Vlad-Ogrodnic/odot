@@ -7,6 +7,7 @@ function openSettings() {
   document.getElementById('settingRootShowsAll').checked    = settings.rootShowsAll;
   document.getElementById('settingShowCompletedAt').checked = settings.showCompletedAt;
   document.getElementById('settingTaskDetails').checked     = settings.taskDetails;
+  document.getElementById('settingGroupByDue').checked      = settings.groupByDue;
   renderBackupStatus();
   document.getElementById('settingsOverlay').classList.add('visible');
   lockPageScroll();
@@ -235,6 +236,14 @@ function handleImportFile(event) {
         ...(typeof item.notes === 'string' && item.notes.trim() ? { notes: item.notes.slice(0, 5000) } : {}),
         ...(parseDueDate(item.dueDate) ? { dueDate: item.dueDate } : {}),
         ...(parseDueDate(item.dueDate) && DUE_TIME_RE.test(item.dueTime || '') ? { dueTime: item.dueTime } : {}),
+        // Repeat rule (only with a date), rebuilt from its known keys only;
+        // seriesId links a repeating task's instances for its stats.
+        // (nextId is deliberately not carried over — it only guards against
+        // double-spawning, and the ids it points to may have been remapped.)
+        ...(parseDueDate(item.dueDate) && isValidRepeat(item.repeat)
+          ? { repeat: { every: item.repeat.every, unit: item.repeat.unit, ...(item.repeat.anchorDay ? { anchorDay: item.repeat.anchorDay } : {}) } }
+          : {}),
+        ...(Number.isInteger(item.seriesId) ? { seriesId: item.seriesId } : {}),
         categoryId,
       });
       added++;

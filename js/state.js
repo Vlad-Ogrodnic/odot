@@ -30,6 +30,7 @@ const DEFAULT_SETTINGS = {
   rootShowsAll:    true, // main screen shows every task (false: only uncategorized ones)
   showCompletedAt: true, // done tasks show when they were completed
   taskDetails:     true, // tapping a task's text opens its detail sheet (false: edits the text in place)
+  groupByDue:      false, // All/Active views split into Overdue/Today/Tomorrow/... sections, ordered by due date
 };
 let settings = { ...DEFAULT_SETTINGS };
 

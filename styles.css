@@ -346,6 +346,11 @@ input, textarea {
   appearance: none;
 }
 
+.detail-number {
+  width: 64px;
+  text-align: center;
+}
+
 .detail-picker::-webkit-date-and-time-value {
   text-align: left;
 }
@@ -827,6 +832,41 @@ input, textarea {
 }
 
 .task-item-wrapper:last-child .task-row {
+  border-bottom: none;
+}
+
+/* Due-date section titles ("Group by due date" setting): small caps-style
+   labels like iOS's grouped lists, with a count. */
+.task-section-header {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 20px 0 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--sep);
+}
+
+.task-section-header:first-child {
+  padding-top: 4px;
+}
+
+.task-section-header.overdue {
+  color: var(--warning);
+}
+
+.task-section-count {
+  font-weight: 600;
+  color: var(--text-dimmer);
+  letter-spacing: 0;
+}
+
+/* The row right before the next section's title: that title's own rule
+   already separates them. */
+.task-item-wrapper:has(+ .task-section-header) .task-row {
   border-bottom: none;
 }
 

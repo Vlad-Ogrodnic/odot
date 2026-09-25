@@ -348,6 +348,13 @@ function updateDrag() {
   }
   d.dropTarget = undefined;
 
+  // Grouped by due date, order comes from the dates, so there's no manual
+  // slot to move into — the row still follows the finger (to reach a
+  // category chip or the header for re-filing) but nothing makes room for
+  // it, and letting go anywhere else just settles it back. Its manual
+  // position is kept for when grouping is turned off again.
+  if (isGroupedView()) return;
+
   const newIndex = slotIndexFor(offset);
   if (newIndex === d.currentIndex) return; // siblings are already shifted for this slot
 

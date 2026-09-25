@@ -69,7 +69,10 @@ function render(root = document) {
   const inScope = (currentCategoryId === null && !settings.rootShowsAll)
     ? new Set([null])
     : new Set([currentCategoryId, ...getDescendantIds(currentCategoryId)]);
-  const categoryTasks = tasks.filter(t => inScope.has(t.categoryId ?? null));
+  // A repeating task's completed instances are listed as one row — the most
+  // recently completed — which carries the whole series' "done X of Y"
+  // (see renderTaskMeta), instead of 30 identical "done" rows for a daily task.
+  const categoryTasks = collapseDoneSeries(tasks.filter(t => inScope.has(t.categoryId ?? null)));
   const total       = categoryTasks.length;
   const doneCount   = categoryTasks.filter(t => t.done).length;
   const activeCount = total - doneCount;
@@ -113,8 +116,83 @@ function render(root = document) {
     return;
   }
 
-  // Task items
-  listEl.innerHTML = visible.map((task, index) => `
+  // Task items — as one list, or split into due-date sections. Numbering
+  // runs on across sections either way.
+  if (!isGroupedView()) {
+    listEl.innerHTML = visible.map((task, i) => renderTaskRow(task, i + 1)).join('');
+    return;
+  }
+  let number = 0;
+  listEl.innerHTML = groupTasksByDue(visible).map(section => `
+    <div class="task-section-header${section.key === 'overdue' ? ' overdue' : ''}">
+      ${section.title}<span class="task-section-count">${section.tasks.length}</span>
+    </div>
+    ${section.tasks.map(task => renderTaskRow(task, ++number)).join('')}
+  `).join('');
+}
+
+function collapseDoneSeries(list) {
+  const latest = new Map(); // seriesId -> its most recently completed instance
+  for (const t of list) {
+    if (!t.done || t.seriesId == null) continue;
+    const cur = latest.get(t.seriesId);
+    if (!cur || (t.completedAt || '') >= (cur.completedAt || '')) latest.set(t.seriesId, t);
+  }
+  return list.filter(t => !t.done || t.seriesId == null || latest.get(t.seriesId) === t);
+}
+
+// ── Grouping by due date ───────────────────────────────────────────────
+// With the "Group by due date" setting on, All and Active are split into
+// these sections (empty ones left out). Done isn't: there, what matters is
+// when a task was finished, not when it was due. Done tasks shown under
+// All go in a final Completed section.
+const DUE_SECTIONS = [
+  ['overdue',   'Overdue'],
+  ['today',     'Today'],
+  ['tomorrow',  'Tomorrow'],
+  ['week',      'Next 7 days'], // same one-week horizon as the "Fri, 3 Oct" labels
+  ['later',     'Later'],
+  ['none',      'No date'],
+  ['completed', 'Completed'],
+];
+
+function isGroupedView() {
+  return settings.groupByDue && filter !== 'done';
+}
+
+function dueSectionKey(task, now) {
+  if (task.done) return 'completed';
+  const due = describeDue(task);
+  if (!due) return 'none';
+  if (due.overdue) return 'overdue'; // includes earlier today, once its time has passed
+  const days = calendarDayDiff(now, parseDueDate(task.dueDate));
+  return days === 0 ? 'today' : days === 1 ? 'tomorrow' : days < 7 ? 'week' : 'later';
+}
+
+// Dated sections are ordered by date, then time — a task with no time
+// counts as 23:59, i.e. after every timed task that day (the user's call:
+// "sometime today" belongs after "at 14:00 today"). Ties, and the undated
+// and completed sections, keep the user's own manual order.
+function groupTasksByDue(list) {
+  const now     = new Date();
+  const buckets = new Map(DUE_SECTIONS.map(([key]) => [key, []]));
+  list.forEach((task, manualIndex) => buckets.get(dueSectionKey(task, now)).push({ task, manualIndex }));
+
+  const sortKey = ({ task }) => `${task.dueDate} ${DUE_TIME_RE.test(task.dueTime || '') ? task.dueTime : '23:59'}`;
+  for (const key of ['overdue', 'today', 'tomorrow', 'week', 'later']) {
+    buckets.get(key).sort((a, b) => {
+      const ka = sortKey(a), kb = sortKey(b);
+      return ka < kb ? -1 : ka > kb ? 1 : a.manualIndex - b.manualIndex;
+    });
+  }
+
+  return DUE_SECTIONS
+    .filter(([key]) => buckets.get(key).length)
+    .map(([key, title]) => ({ key, title, tasks: buckets.get(key).map(e => e.task) }));
+}
+
+function renderTaskRow(task, number) {
+  return `
     <div class="task-item-wrapper" id="task-${task.id}" data-id="${task.id}">
       <div class="delete-reveal" onclick="deleteTask(${task.id})" aria-label="Delete task">
         <svg class="icon delete-reveal-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -126,7 +204,7 @@ function render(root = document) {
         </svg>
       </div>
       <div class="task-row">
-        <div class="task-number">${index + 1}</div>
+        <div class="task-number">${number}</div>
         <div class="check-circle ${task.done ? 'done' : ''}"
              onclick="toggleTask(${task.id})"
              role="checkbox"
@@ -148,12 +226,12 @@ function render(root = document) {
         ${renderCategoryLabel(task)}
       </div>
     </div>
-  `).join('');
+  `;
 }
 
 function renderTitleGroup() {
   if (currentCategoryId === null) {
-    return `<h1 class="app-title">Tasks v23</h1>`;
+    return `<h1 class="app-title">Tasks v25</h1>`;
   }
   const cat   = categories.find(c => c.id === currentCategoryId);
   const name  = cat ? escHtml(cat.name) : 'Category';
@@ -210,6 +288,7 @@ function renderCategoryLabel(task) {
 // no completion time, so they show nothing rather than a made-up one.
 const ICON_CALENDAR = '<svg class="icon meta-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4.5" width="18" height="17" rx="2.5"/><path d="M16 2.5v4M8 2.5v4M3 10h18"/></svg>';
 const ICON_NOTES    = '<svg class="icon meta-icon" viewBox="0 0 24 24" aria-label="Has notes"><path d="M4 6h16M4 12h16M4 18h10"/></svg>';
+const ICON_REPEAT   = '<svg class="icon meta-icon" viewBox="0 0 24 24" aria-label="Repeats"><path d="M17 2l4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg>';
 
 function renderTaskMeta(task) {
   const items = [];
@@ -218,9 +297,14 @@ function renderTaskMeta(task) {
       const when = formatCompletedAt(task.completedAt);
       if (when) items.push(`<span class="meta-item">Completed ${when}</span>`);
     }
+    // The one row standing for a repeating task's completions (see
+    // collapseDoneSeries): its track record.
+    const stats = task.seriesId != null ? seriesStats(task.seriesId) : null;
+    if (stats) items.push(`<span class="meta-item">${ICON_REPEAT}${stats.done} of ${stats.expected}</span>`);
   } else {
     const due = describeDue(task);
     if (due) items.push(`<span class="meta-item${due.overdue ? ' overdue' : ''}">${ICON_CALENDAR}${due.label}</span>`);
+    if (due && isValidRepeat(task.repeat)) items.push(`<span class="meta-item">${ICON_REPEAT}</span>`);
   }
   if (task.notes) items.push(`<span class="meta-item">${ICON_NOTES}</span>`);
   return items.length ? `<div class="task-meta">${items.join('')}</div>` : '';
