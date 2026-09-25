@@ -1,0 +1,799 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+:root {
+  --bg:            #F5F1EA;
+  --track:         #ECE7DD;
+  --switch-off:    #E3DDD2;
+  --sheet:         #FFFFFF;
+  --text:          #221F1B;
+  --text-dim:      #8C8478;
+  --text-dimmer:   #B8B0A2;
+  --sep:           rgba(34, 31, 26, 0.12);
+  --accent:        #C1666B;
+  --accent-text:   #FBF3EF;
+  --done:          #4FA05A;
+  --danger:        #C0392B;
+  --warning:       #B8863B;
+  /* Auto-assigned category colors (see catColorVar in js/categories.js) — a
+     fixed palette rather than a color picker, so identity is automatic. */
+  --cat-0:         #4C6899;
+  --cat-1:         #A87A22;
+  --cat-2:         #3D7A73;
+  --cat-3:         #6B5596;
+  --cat-4:         #9C6640;
+  --cat-5:         #66803F;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg:          #171512;
+    --track:       #221F1B;
+    --switch-off:  #3A3530;
+    --sheet:       #201C18;
+    --text:        #F2EFE9;
+    --text-dim:    #8C867C;
+    --text-dimmer: #5C574E;
+    --sep:         rgba(242, 239, 233, 0.09);
+    --done:        #6FBF73;
+    --danger:      #E05D51;
+    --warning:     #E0A94D;
+    --cat-0:       #7B93B8;
+    --cat-1:       #D2A24C;
+    --cat-2:       #5C9A93;
+    --cat-3:       #9B87C4;
+    --cat-4:       #C98F6B;
+    --cat-5:       #93A87C;
+  }
+}
+
+html, body {
+  height: 100%;
+  /* Horizontal movement anywhere is always ours (swipe back out of a
+     category, swipe a row to delete) — iOS never claims it as a pan
+     and cancels the gesture. Vertical stays native scrolling. Also
+     turns off pinch/double-tap zoom, which an app shouldn't have. */
+  touch-action: pan-y;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  /* (Notch/home-indicator padding lives on .page, not here — see there.) */
+  /* App-wide, not just on task rows: nothing here is document text meant
+     to be selected, same as a native app's labels. Scoped to rows only
+     (v12), iOS's long-press text selection still found selectable text
+     elsewhere (header, count, chips) to latch onto mid-hold. */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* The current screen. Opaque and stacked above .nav-underlay, so the
+   parent level only shows through where this has been slid aside. */
+.page {
+  position: relative;
+  z-index: 1;
+  /* Always at least a full screen tall, even with only a task or two,
+     or the level behind it shows through below its content while it
+     slides away. The safe-area padding (clearing the notch/Dynamic
+     Island and home indicator) is inside this box for the same reason —
+     on body, as it used to be, it left uncovered strips at the edges. */
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
+           env(safe-area-inset-bottom) env(safe-area-inset-left);
+  background: var(--bg);
+}
+
+.page.nav-moving {
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.18);
+  will-change: transform;
+}
+
+/* The parent level, rendered into a copy of .page and parked behind the
+   real one for the duration of a swipe back (or animated back tap).
+   Its own scroll container, so its sticky header sticks just like the
+   real page's does. */
+.nav-underlay {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  background: var(--bg);
+  pointer-events: none;
+  will-change: transform;
+}
+
+/* A copy mustn't replay the rows' slide-in entrance animation. */
+.nav-underlay * {
+  animation: none !important;
+}
+
+/* Darkens the parent level while it's mostly covered, lifting as the
+   current screen slides away — as iOS does. */
+.nav-dim {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background: #000;
+  pointer-events: none;
+}
+
+/* Real text fields opt back in — they need a cursor, selection and the
+   copy/paste callout. */
+input, textarea {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+
+/* ── Header ──────────────────────────────────────── */
+.header {
+  background: var(--bg);
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--sep);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.header-top {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+}
+
+.task-count {
+  font-size: 13.5px;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
+
+.settings-btn {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  display: flex;
+  line-height: 1;
+  padding: 6px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+/* ── Settings sheet ──────────────────────────────── */
+.settings-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 30;
+  align-items: flex-end;
+}
+
+.settings-overlay.visible {
+  display: flex;
+}
+
+.settings-sheet {
+  background: var(--sheet);
+  width: 100%;
+  border-radius: 20px 20px 0 0;
+  padding: 18px 20px calc(20px + env(safe-area-inset-bottom));
+  animation: slideUp 0.2s ease;
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.settings-header h2 {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.settings-close {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 18px;
+  padding: 6px;
+  cursor: pointer;
+}
+
+.settings-action {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-top: 1px solid var(--sep);
+  color: var(--accent);
+  font-size: 16px;
+  font-weight: 600;
+  padding: 16px 4px;
+  cursor: pointer;
+  -webkit-appearance: none;
+}
+
+.settings-section-label {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  padding: 14px 4px 8px;
+}
+
+/* The whole row is the <label>, so tapping anywhere on it flips the
+   switch — not just the small switch itself. */
+.settings-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border-top: 1px solid var(--sep);
+  padding: 13px 4px;
+  cursor: pointer;
+}
+
+.settings-toggle-title {
+  display: block;
+  font-size: 16px;
+}
+
+.settings-toggle-sub {
+  display: block;
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+/* iOS-style switch, drawn by hand so it looks the same on every browser
+   and uses the app's accent instead of system green. */
+.switch {
+  -webkit-appearance: none;
+  appearance: none;
+  flex-shrink: 0;
+  position: relative;
+  width: 51px;
+  height: 31px;
+  margin: 0;
+  border-radius: 16px;
+  background: var(--switch-off);
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.switch::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 27px;
+  height: 27px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+  transition: transform 0.2s ease;
+}
+
+.switch:checked {
+  background: var(--accent);
+}
+
+.switch:checked::before {
+  transform: translateX(20px);
+}
+
+/* ── Input ───────────────────────────────────────── */
+.input-area {
+  padding: 14px 16px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.input-area input {
+  flex: 1;
+  border: 1.5px solid var(--sep);
+  background: var(--track);
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 16px;
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.15s;
+  -webkit-appearance: none;
+}
+
+.input-area input:focus {
+  border-color: var(--accent);
+}
+
+.input-area input::placeholder {
+  color: var(--text-dim);
+}
+
+.add-btn {
+  background: var(--accent);
+  color: var(--accent-text);
+  border: none;
+  border-radius: 12px;
+  padding: 12px 20px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.15s, transform 0.1s;
+  -webkit-appearance: none;
+}
+
+.add-btn:active {
+  opacity: 0.8;
+  transform: scale(0.97);
+}
+
+/* ── Status: segmented control ─────────────────────── */
+.filter-bar {
+  padding: 4px 16px 14px;
+}
+
+.segmented {
+  display: flex;
+  gap: 4px;
+  background: var(--track);
+  border-radius: 14px;
+  padding: 4px;
+}
+
+.filter-btn {
+  flex: 1;
+  text-align: center;
+  padding: 11px 0;
+  border-radius: 10px;
+  border: none;
+  font-size: 17px;
+  font-weight: 600;
+  cursor: pointer;
+  background: transparent;
+  color: var(--text-dim);
+  -webkit-appearance: none;
+}
+
+.filter-btn.active {
+  background: var(--accent);
+  color: var(--accent-text);
+  font-weight: 700;
+}
+
+/* ── Done time-window (shown only while the Done tab is active) ──── */
+.window-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 16px 14px;
+}
+
+.window-btn {
+  padding: 5px 13px;
+  border-radius: 14px;
+  border: 1px solid var(--sep);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  background: transparent;
+  color: var(--text-dim);
+  -webkit-appearance: none;
+}
+
+.window-btn.active {
+  background: var(--track);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ── Categories (nested) ─────────────────────────── */
+.category-bar {
+  padding: 0 16px 16px;
+}
+
+/* Title area: plain "Tasks" at root, or a back/name/options row inside a category */
+.title-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* A plain type selector here (".title-group h1") would outrank
+   .category-title's single-class specificity regardless of source
+   order, silently overriding its font-size — so the root heading gets
+   its own class instead of relying on the bare element. */
+.app-title {
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+.back-btn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 30px;
+  line-height: 1;
+  padding: 4px 6px 4px 0;
+  margin-left: -6px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.category-title {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.more-btn {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 20px;
+  line-height: 1;
+  padding: 8px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+/* Plain colored text, no chip/bubble — each category keeps its own hue
+   everywhere it appears. These are pure navigation (drill into a child),
+   never a "selected filter", so none of them ever gets an active state. */
+.category-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.cat-chip {
+  background: none;
+  border: none;
+  padding: 4px 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.add-cat-btn {
+  background: none;
+  border: none;
+  padding: 4px 0;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--text-dimmer);
+  cursor: pointer;
+}
+
+/* Shown in place of the "+" while naming a new category: pick a color,
+   then type the name. */
+.add-cat-form {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.category-color-input {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 50%;
+  overflow: hidden;
+  padding: 0;
+  cursor: pointer;
+  background: none;
+}
+
+.category-add-input {
+  border: none;
+  border-bottom: 1.5px solid var(--accent);
+  font-size: 16px; /* iOS Safari auto-zooms the page on focus for inputs under 16px */
+  font-family: inherit;
+  font-weight: 600;
+  background: transparent;
+  color: var(--text);
+  outline: none;
+  width: 100%;
+  padding: 0 0 4px;
+  -webkit-appearance: none;
+}
+
+/* Passive "which category is this from" indicator (aggregated views only) */
+.category-label {
+  flex-shrink: 0;
+  max-width: 90px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Highlighted while dragging a task over a valid category drop target */
+.drop-target-hover {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ── Task list ───────────────────────────────────── */
+/* Flat, continuous list with hairline dividers — no per-row card/shadow.
+   That's this design's whole point: shape (cards, pills) is reserved for
+   actual controls (the segmented control, the settings sheet), not spent
+   on every repeated block. */
+.task-list {
+  padding: 0 16px 32px;
+}
+
+/* Outer wrapper: clips the swipe-to-delete reveal and is what gets
+   translated up/down during drag-to-reorder. */
+.task-item-wrapper {
+  position: relative;
+  overflow: hidden;
+  animation: slideIn 0.2s ease;
+}
+
+.task-item-wrapper.dragging {
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+  z-index: 5;
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Red delete button revealed behind the row when swiped left */
+.delete-reveal {
+  position: absolute;
+  inset: 0;
+  background: var(--danger);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 22px;
+  cursor: pointer;
+}
+
+/* Icons are inline line-art SVGs (stroke = currentColor), not emoji:
+   iOS renders emoji as full-color Apple artwork that ignores the palette
+   and reads as clip-art next to native-style UI. */
+.icon {
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.delete-reveal-icon {
+  color: #fff;
+  width: 22px;
+  height: 22px;
+}
+
+.settings-btn .icon {
+  width: 23px;
+  height: 23px;
+}
+
+/* Backup overdue: a small dot on the gear's top-right, like an iOS badge
+   but without a number or an alarming red — a nudge, not an alert. */
+.settings-btn {
+  position: relative;
+}
+
+.settings-btn.backup-due::after {
+  content: '';
+  position: absolute;
+  top: 5px;
+  right: 4px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--warning);
+  box-shadow: 0 0 0 2px var(--bg); /* a gap ring, so it reads as separate from the gear's outline */
+}
+
+.backup-status {
+  font-size: 13px;
+  color: var(--text-dim);
+  padding: 0 4px 12px;
+}
+
+.backup-status.due {
+  color: var(--warning);
+}
+
+/* The row that slides on top of .delete-reveal */
+.task-row {
+  position: relative;
+  z-index: 1;
+  background: var(--bg);
+  padding: 15px 0;
+  border-bottom: 1px solid var(--sep);
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  /* `pan-y`: a vertical move on a row is a real native iOS scroll
+     (momentum, rubber-banding and all) unless the touch has already
+     become one of our own gestures — a pickup or a swipe — at which
+     point the non-passive touchmove listener in js/gestures.js locks
+     scrolling out for the rest of it. v12–v13 used `none` here to beat
+     iOS's long-press text selection, which cost scrolling by touching a
+     row at all; app-wide user-select:none on body now covers that. */
+  touch-action: pan-y;
+  /* Without this, holding a row to drag it also triggers the browser's
+     native text-selection/callout on whatever text is under the finger. */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.task-item-wrapper:last-child .task-row {
+  border-bottom: none;
+}
+
+.task-number {
+  width: 20px;
+  flex-shrink: 0;
+  text-align: right;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dimmer);
+}
+
+/* Inline edit input, replaces .task-text while editing — explicitly
+   selectable again, since it sits inside .task-row which turns
+   selection off for everything else. */
+.edit-input {
+  flex: 1;
+  min-width: 0;
+  font-size: 16.5px;
+  line-height: 1.4;
+  font-family: inherit;
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+  color: var(--text);
+  background: transparent;
+  border: none;
+  border-bottom: 1.5px solid var(--accent);
+  outline: none;
+  padding: 0 0 2px;
+  -webkit-appearance: none;
+}
+
+/* Circular checkbox */
+.check-circle {
+  width: 23px;
+  height: 23px;
+  border-radius: 50%;
+  border: 1.5px solid var(--text-dimmer);
+  cursor: pointer;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, border-color 0.15s;
+  user-select: none;
+}
+
+.check-circle.done {
+  background: var(--done);
+  border-color: var(--done);
+}
+
+.check-circle .checkmark {
+  display: none;
+  color: var(--bg);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  margin-top: 1px;
+}
+
+.check-circle.done .checkmark {
+  display: block;
+}
+
+/* Task text */
+.task-text {
+  flex: 1;
+  font-size: 16.5px;
+  line-height: 1.4;
+  word-break: break-word;
+  transition: color 0.15s;
+}
+
+.task-text.done {
+  text-decoration: line-through;
+  color: var(--text-dim);
+}
+
+/* Text plus an optional meta line under it; this, not .task-text, is the
+   flexible column and the tap-to-edit target. */
+.task-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.task-meta {
+  font-size: 13px;
+  color: var(--text-dim); /* not --text-dimmer: too faint to read at 13px in dark mode */
+  margin-top: 3px;
+}
+
+/* ── Empty state ─────────────────────────────────── */
+.empty-state {
+  text-align: center;
+  padding: 64px 24px 32px;
+  color: var(--text-dim);
+}
+
+.empty-icon {
+  font-size: 52px;
+  display: block;
+  margin-bottom: 14px;
+  line-height: 1;
+}
+
+.empty-title {
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+
+.empty-sub {
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* ── Offline banner ──────────────────────────────── */
+.offline-banner {
+  display: none;
+  background: var(--warning);
+  color: var(--bg);
+  text-align: center;
+  padding: 6px 16px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.offline-banner.visible {
+  display: block;
+}

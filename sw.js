@@ -11,14 +11,24 @@
 // the user clears Safari's website data).
 // ─────────────────────────────────────────────────────────────────────────────
 
-const CACHE_NAME = 'todo-app-v19';
+const CACHE_NAME = 'todo-app-v21';
 
 // All files that make up the app shell. Must be kept in sync with what's
-// actually in the project. If you add a new file (e.g. an icon PNG), add it
-// here so it gets cached on install.
+// actually in the project. If you add a new file (e.g. an icon PNG, or a new
+// js/ file — also listed in index.html's <script> tags), add it here so it
+// gets cached on install.
 const ASSETS = [
   './',
   './index.html',
+  './styles.css',
+  './js/state.js',
+  './js/tasks.js',
+  './js/categories.js',
+  './js/settings.js',
+  './js/render.js',
+  './js/gestures.js',
+  './js/nav.js',
+  './js/app.js',
   './manifest.json',
   './sw.js',
   './icon.svg',
