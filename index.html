@@ -77,11 +77,7 @@
       font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif;
       background: var(--bg);
       color: var(--text);
-      /* Respect iPhone notch and home indicator */
-      padding-top: env(safe-area-inset-top);
-      padding-bottom: env(safe-area-inset-bottom);
-      padding-left: env(safe-area-inset-left);
-      padding-right: env(safe-area-inset-right);
+      /* (Notch/home-indicator padding lives on .page, not here — see there.) */
       /* App-wide, not just on task rows: nothing here is document text meant
          to be selected, same as a native app's labels. Scoped to rows only
          (v12), iOS's long-press text selection still found selectable text
@@ -96,7 +92,15 @@
     .page {
       position: relative;
       z-index: 1;
-      min-height: 100%;
+      /* Always at least a full screen tall, even with only a task or two,
+         or the level behind it shows through below its content while it
+         slides away. The safe-area padding (clearing the notch/Dynamic
+         Island and home indicator) is inside this box for the same reason —
+         on body, as it used to be, it left uncovered strips at the edges. */
+      min-height: 100vh;
+      min-height: 100dvh;
+      padding: env(safe-area-inset-top) env(safe-area-inset-right)
+               env(safe-area-inset-bottom) env(safe-area-inset-left);
       background: var(--bg);
     }
 
@@ -115,8 +119,6 @@
       z-index: 0;
       overflow: hidden;
       background: var(--bg);
-      padding: env(safe-area-inset-top) env(safe-area-inset-right)
-               env(safe-area-inset-bottom) env(safe-area-inset-left);
       pointer-events: none;
       will-change: transform;
     }
@@ -1517,7 +1519,7 @@
 
   function renderTitleGroup() {
     if (currentCategoryId === null) {
-      return `<h1 class="app-title">Tasks v17</h1>`;
+      return `<h1 class="app-title">Tasks v18</h1>`;
     }
     const cat   = categories.find(c => c.id === currentCategoryId);
     const name  = cat ? escHtml(cat.name) : 'Category';
