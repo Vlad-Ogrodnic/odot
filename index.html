@@ -75,6 +75,21 @@
       padding-bottom: env(safe-area-inset-bottom);
       padding-left: env(safe-area-inset-left);
       padding-right: env(safe-area-inset-right);
+      /* App-wide, not just on task rows: nothing here is document text meant
+         to be selected, same as a native app's labels. Scoped to rows only
+         (v12), iOS's long-press text selection still found selectable text
+         elsewhere (header, count, chips) to latch onto mid-hold. */
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
+    }
+
+    /* Real text fields opt back in — they need a cursor, selection and the
+       copy/paste callout. */
+    input, textarea {
+      -webkit-user-select: text;
+      user-select: text;
+      -webkit-touch-callout: default;
     }
 
     /* ── Header ──────────────────────────────────────── */
@@ -477,14 +492,14 @@
       display: flex;
       align-items: center;
       gap: 13px;
-      /* `none`, not `pan-y`: confirmed on-device (v12) that pan-y itself was
-         what kept iOS's native long-press text-selection gesture alive
-         alongside our own touch handling — user-select/touch-callout/
-         selectstart/preventDefault below all failed to stop it with pan-y
-         in place. This gives up native scroll-by-touching-a-row in
-         exchange (nothing here replaces it yet — scrolling currently relies
-         on touches that start off a row, or on already-native momentum). */
-      touch-action: none;
+      /* `pan-y`: a vertical move on a row is a real native iOS scroll
+         (momentum, rubber-banding and all) unless the touch has already
+         become one of our own gestures — a pickup or a swipe — at which
+         point the non-passive touchmove listener in the script locks
+         scrolling out for the rest of it. v12–v13 used `none` here to beat
+         iOS's long-press text selection, which cost scrolling by touching a
+         row at all; app-wide user-select:none on body now covers that. */
+      touch-action: pan-y;
       /* Without this, holding a row to drag it also triggers the browser's
          native text-selection/callout on whatever text is under the finger. */
       -webkit-user-select: none;
@@ -1229,7 +1244,7 @@
 
   function renderTitleGroup() {
     if (currentCategoryId === null) {
-      return `<h1 class="app-title">Tasks v13</h1>`;
+      return `<h1 class="app-title">Tasks v14</h1>`;
     }
     const cat   = categories.find(c => c.id === currentCategoryId);
     const name  = cat ? escHtml(cat.name) : 'Category';
@@ -1322,6 +1337,11 @@
   // to. That's fine only because a new drag can't physically arm until
   // LONG_PRESS_MS after its own touch starts, by which point a shorter
   // previous settle has always already finished on its own.
+  const AUTOSCROLL_ZONE = 80;  // px band at the list's visible top/bottom edge where a held row scrolls the page
+  const AUTOSCROLL_MAX  = 900; // px/s at the very edge of that band (eases in quadratically from its inner side)
+  const AUTOSCROLL_ARM  = 12;  // px the finger must travel after pickup before edge-scrolling can start,
+                               // so picking up a row that already sits near an edge doesn't lurch the page
+  const headerEl = document.querySelector('.header');
 
   let openSwipeId       = null; // id of the currently swiped-open row, if any
   let pressState        = null;
@@ -1368,6 +1388,49 @@
     e.preventDefault();
   });
 
+  // Last line of defense against that same long-press selection, which has
+  // outlasted every other measure here before: if one appears anyway while
+  // a row is held, clear it the moment it does.
+  document.addEventListener('selectionchange', () => {
+    if (!dragState) return;
+    const sel = window.getSelection();
+    if (sel && !sel.isCollapsed) sel.removeAllRanges();
+  });
+
+  // Native scrolling stays on for a touch that starts on a row (touch-action:
+  // pan-y) until the touch becomes one of our own gestures — then this locks
+  // the page in place for the rest of it, like a native list does once a row
+  // is picked up or swiped sideways. Pointer events can't do this on iOS
+  // (preventDefault on pointermove never stops a scroll); a non-passive
+  // touchmove listener can, but only if it's already attached when the touch
+  // begins — hence registered once, up front, rather than per gesture. On
+  // iOS pointermove fires before its touchmove, so pressState.mode is
+  // already up to date by the time this runs.
+  taskListEl.addEventListener('touchmove', e => {
+    const mode = pressState?.mode;
+    if ((mode === 'drag' || mode === 'swipe') && e.cancelable) e.preventDefault();
+  }, { passive: false });
+
+  // iOS Safari has no Vibration API, but since iOS 18 it plays the system
+  // haptic tick whenever an <input type="checkbox" switch> is toggled — so a
+  // hidden one, toggled through its label, is the only haptic a PWA can
+  // trigger. Silently does nothing on older iOS or anywhere else.
+  const hapticLabel = (() => {
+    const label = document.createElement('label');
+    label.setAttribute('aria-hidden', 'true');
+    label.style.display = 'none';
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.setAttribute('switch', '');
+    label.appendChild(input);
+    document.body.appendChild(label);
+    return label;
+  })();
+
+  function haptic() {
+    hapticLabel.click();
+  }
+
   taskListEl.addEventListener('pointerdown', e => {
     // Actively editing — this is a real text field, let it handle its own
     // touch behavior (cursor placement, native select-word/select-all)
@@ -1391,10 +1454,10 @@
 
     if (deleteBtn) return; // let its own onclick handle deletion
     if (row) {
-      // Belt-and-suspenders alongside touch-action:none and selectstart
-      // below — all three were needed together to actually stop iOS's
-      // native long-press text-selection from arming on-device; none of
-      // them alone was enough.
+      // Belt-and-suspenders alongside the app-wide user-select:none and the
+      // selectstart/selectionchange guards above against iOS's native
+      // long-press text selection. (Doesn't block native scrolling —
+      // preventDefault on a pointer event never does.)
       e.preventDefault();
       startPress(e, row);
     }
@@ -1420,6 +1483,8 @@
       pointerId: e.pointerId,
       startX: e.clientX,
       startY: e.clientY,
+      lastX:  e.clientX, // latest finger position, so a pickup starts exactly where the finger is now
+      lastY:  e.clientY,
       baseX:  isOpen ? SWIPE_OPEN : 0,
       wasOpen: isOpen,
       mode: null, // null (pending) | 'swipe' | 'scroll' | 'drag'
@@ -1445,6 +1510,8 @@
       return;
     }
 
+    pressState.lastX = e.clientX;
+    pressState.lastY = e.clientY;
     const dx = e.clientX - pressState.startX;
     const dy = e.clientY - pressState.startY;
 
@@ -1520,9 +1587,20 @@
     const wrappers   = Array.from(taskListEl.querySelectorAll('.task-item-wrapper'));
     const startIndex = wrappers.indexOf(wrapper);
     const visibleIds = wrappers.map(w => Number(w.dataset.id));
-    const itemHeight = wrapper.getBoundingClientRect().height; // rows are contiguous now, no gap to add
+    // Every row's own layout box, measured once up front: rows differ in
+    // height (long tasks wrap), so reordering can't assume they're all as
+    // tall as the dragged one. offsetTop/offsetHeight rather than
+    // getBoundingClientRect because they ignore transforms (a sibling still
+    // mid-slideIn, the pickup pop below) and don't change as the page scrolls.
+    const layouts = wrappers.map(w => ({ top: w.offsetTop, height: w.offsetHeight }));
 
-    dragState = { startIndex, currentIndex: startIndex, startY: pressState.startY, itemHeight, wrapper, wrappers, visibleIds, dropTarget: undefined };
+    dragState = {
+      startIndex, currentIndex: startIndex, wrapper, wrappers, visibleIds, layouts,
+      startY: pressState.lastY, startScrollY: window.scrollY,
+      lastX:  pressState.lastX, lastY: pressState.lastY,
+      autoScrollArmed: false, scrollCarry: 0, lastFrame: null, rafId: null, dropped: false,
+      dropTarget: undefined,
+    };
 
     wrapper.classList.add('dragging');
     // The dragged row otherwise occludes whatever is really underneath it
@@ -1535,59 +1613,161 @@
     // reordering (Shortcuts, Home Screen icons) gives instantly.
     wrapper.style.transition = `transform ${PICKUP_MS}ms ease`;
     wrapper.style.transform  = 'scale(1.025)';
+
+    haptic(); // the "tick" Reminders gives the moment a row lifts
+    dragState.rafId = requestAnimationFrame(autoScrollFrame);
   }
 
   function onDragMove(e) {
     if (!dragState) return;
-    const dy = e.clientY - dragState.startY;
+    dragState.lastX = e.clientX;
+    dragState.lastY = e.clientY;
+    if (Math.abs(e.clientY - dragState.startY) > AUTOSCROLL_ARM) dragState.autoScrollArmed = true;
+    updateDrag();
+  }
+
+  // Positions the dragged row and its siblings for the finger's latest
+  // position. Driven both by finger movement (onDragMove) and by the page
+  // scrolling underneath a still finger (autoScrollFrame).
+  function updateDrag() {
+    const d = dragState;
+    // Finger travel plus however far the page has auto-scrolled since pickup:
+    // the row lives in the scrolling content, so without the scroll term it
+    // would drift away from the finger as the page moves under it.
+    // Capped so the row's bottom never passes the last row's: a transformed
+    // row still stretches the page's scrollable height, so dragging it lower
+    // while edge-scrolling down would grow the page, scroll further, drag the
+    // row lower still — scrolling off into blank space forever. (No cap going
+    // up: the chips and header up there are re-file targets it must reach.)
+    const last   = d.layouts[d.layouts.length - 1];
+    const own    = d.layouts[d.startIndex];
+    const offset = Math.min(
+      (d.lastY - d.startY) + (window.scrollY - d.startScrollY),
+      (last.top + last.height) - (own.top + own.height),
+    );
     // No transition here — the row should track the finger 1:1 with no lag.
     // Only the pickup pop and the drop settle (below) animate.
-    dragState.wrapper.style.transition = 'none';
-    dragState.wrapper.style.transform  = `translateY(${dy}px) scale(1.025)`;
+    d.wrapper.style.transition = 'none';
+    d.wrapper.style.transform  = `translateY(${offset}px) scale(1.025)`;
 
     // Dragging onto a category chip or the title area re-files the task
     // there instead of reordering it — check that before the reorder math.
-    const dropEl = document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-category-drop]');
+    const dropEl = document.elementFromPoint(d.lastX, d.lastY)?.closest('[data-category-drop]');
     updateDropHighlight(dropEl || null);
 
     if (dropEl) {
-      dragState.dropTarget = dropEl.dataset.categoryDrop;
-      dragState.currentIndex = dragState.startIndex; // no reorder while re-filing
-      dragState.wrappers.forEach(w => {
-        if (w !== dragState.wrapper) w.style.transform = '';
+      d.dropTarget = dropEl.dataset.categoryDrop;
+      d.currentIndex = d.startIndex; // no reorder while re-filing
+      d.wrappers.forEach(w => {
+        if (w !== d.wrapper) w.style.transform = '';
       });
       return;
     }
-    dragState.dropTarget = undefined;
+    d.dropTarget = undefined;
 
-    let newIndex = dragState.startIndex + Math.round(dy / dragState.itemHeight);
-    newIndex = Math.max(0, Math.min(dragState.wrappers.length - 1, newIndex));
+    const newIndex = slotIndexFor(offset);
+    if (newIndex === d.currentIndex) return; // siblings are already shifted for this slot
 
-    dragState.wrappers.forEach((w, i) => {
-      if (w === dragState.wrapper) return;
+    const s = d.startIndex;
+    const h = d.layouts[s].height;
+    d.wrappers.forEach((w, i) => {
+      if (w === d.wrapper) return;
       let shift = 0;
-      if (dragState.startIndex < newIndex && i > dragState.startIndex && i <= newIndex) {
-        shift = -dragState.itemHeight;
-      } else if (dragState.startIndex > newIndex && i < dragState.startIndex && i >= newIndex) {
-        shift = dragState.itemHeight;
-      }
+      if (i > s && i <= newIndex)      shift = -h;
+      else if (i < s && i >= newIndex) shift = h;
       w.style.transition = 'transform 0.15s ease';
       w.style.transform  = shift ? `translateY(${shift}px)` : '';
     });
 
-    dragState.currentIndex = newIndex;
+    d.currentIndex = newIndex;
+  }
+
+  // Which slot the dragged row would land in if dropped now, given how far
+  // it's been moved from its own. It swaps past a sibling once its leading
+  // edge (bottom going down, top going up) crosses that sibling's midpoint —
+  // the edge rather than its own center, so a tall row dragged past short
+  // ones (or a short one past tall ones) swaps as it visibly overlaps them
+  // instead of noticeably early or late. With equal heights this is exactly
+  // "half a row", same as before rows could differ.
+  function slotIndexFor(offset) {
+    const { layouts, startIndex: s } = dragState;
+    const top    = layouts[s].top + offset;
+    const bottom = top + layouts[s].height;
+    const mid    = i => layouts[i].top + layouts[i].height / 2;
+    let i = s;
+    if (offset > 0) { while (i + 1 < layouts.length && bottom > mid(i + 1)) i++; }
+    else            { while (i - 1 >= 0 && top < mid(i - 1)) i--; }
+    return i;
+  }
+
+  // How far the dragged row sits from its original spot once in slot
+  // `index`: the combined height of every sibling it moved past.
+  function slotOffset(index) {
+    const { layouts, startIndex: s } = dragState;
+    let y = 0;
+    for (let i = s + 1; i <= index; i++) y += layouts[i].height;
+    for (let i = index; i < s; i++)      y -= layouts[i].height;
+    return y;
+  }
+
+  // Scrolls the page while a held row sits near the top/bottom edge of the
+  // list's visible area, so a row can be moved further than one screen —
+  // faster the closer to the edge, like Reminders. Runs every frame for the
+  // whole drag (a finger resting in the zone sends no pointer events of its
+  // own to drive it).
+  function autoScrollFrame(now) {
+    const d = dragState;
+    if (!d || d.dropped) return;
+    const dt = d.lastFrame === null ? 0 : Math.min(now - d.lastFrame, 50);
+    d.lastFrame = now;
+
+    // Hovering a re-file target means "drop it here", not "keep scrolling".
+    const v = d.autoScrollArmed && d.dropTarget === undefined ? autoScrollVelocity(d.lastY) : 0;
+    if (v) {
+      // Page scroll positions only move in whole pixels, so fractional
+      // per-frame amounts are carried over — otherwise slow speeds near the
+      // zone's inner edge would round down to never moving at all.
+      d.scrollCarry += v * dt / 1000;
+      const step = Math.trunc(d.scrollCarry);
+      if (step) {
+        d.scrollCarry -= step;
+        const before = window.scrollY;
+        window.scrollBy(0, step);
+        if (window.scrollY !== before) updateDrag();
+      }
+    } else {
+      d.scrollCarry = 0;
+    }
+    d.rafId = requestAnimationFrame(autoScrollFrame);
+  }
+
+  // px/s to scroll for a finger at viewport y: negative (up) in the band just
+  // below the sticky header, positive (down) in the band at the screen's
+  // bottom, 0 elsewhere. The header itself is excluded — it's a re-file drop
+  // target (the current category), not part of the scroll zone.
+  function autoScrollVelocity(y) {
+    const top    = headerEl.getBoundingClientRect().bottom;
+    const bottom = window.innerHeight;
+    let depth = 0;
+    if (y < top) return 0;
+    if (y < top + AUTOSCROLL_ZONE)         depth = y - (top + AUTOSCROLL_ZONE);
+    else if (y > bottom - AUTOSCROLL_ZONE) depth = y - (bottom - AUTOSCROLL_ZONE);
+    const t = Math.min(1, Math.abs(depth) / AUTOSCROLL_ZONE);
+    return Math.sign(depth) * AUTOSCROLL_MAX * t * t;
   }
 
   function onDragEnd() {
     if (!dragState) return;
-    const { wrapper, wrappers, startIndex, currentIndex, itemHeight, visibleIds, dropTarget } = dragState;
+    const { wrapper, wrappers, startIndex, currentIndex, visibleIds, dropTarget } = dragState;
 
+    dragState.dropped = true; // stops autoScrollFrame
+    cancelAnimationFrame(dragState.rafId);
     updateDropHighlight(null);
     // dragState stays set through the settle below (cleared in the timeout,
     // not here) — the click listener checks it to swallow the stray click
     // iOS sometimes fires against a sibling right as the drag ends (see that
-    // listener). Nothing here reads dragState again before the timeout, so
-    // leaving it set this long doesn't block a fresh press elsewhere either.
+    // listener). Only the click/selectionchange guards read it until then,
+    // so leaving it set this long doesn't block a fresh press elsewhere.
 
     // Ease the dragged row from wherever the finger left it into the gap its
     // siblings already opened up for it. The siblings themselves are left
@@ -1595,7 +1775,7 @@
     // the dragged row catching up, would snap them back to their pre-drag
     // spots while the dragged row is still animating toward a slot sized for
     // the shifted layout, i.e. the two would visibly disagree for 160ms.
-    const finalY = dropTarget !== undefined ? 0 : (currentIndex - startIndex) * itemHeight;
+    const finalY = dropTarget !== undefined ? 0 : slotOffset(currentIndex);
     wrapper.style.transition = `transform ${SETTLE_MS}ms ease`;
     wrapper.style.transform  = `translateY(${finalY}px) scale(1)`;
 
