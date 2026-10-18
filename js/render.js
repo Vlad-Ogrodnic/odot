@@ -3,15 +3,17 @@
 // Classic script, not a module: see the note in index.html.
 
 // ── Filter ─────────────────────────────────────────────────────────────
-function setFilter(f, btn) {
+// Both remembered across launches (saveView in js/state.js). The segmented
+// control's highlight is set by render(), so it's right on startup too.
+function setFilter(f) {
   filter = f;
-  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
+  saveView();
   render();
 }
 
 function setDoneWindow(w) {
   doneWindow = w;
+  saveView();
   render();
 }
 
@@ -58,6 +60,7 @@ function render(root = document) {
   titleGroupEl.dataset.categoryDrop = currentCategoryId === null ? '' : String(currentCategoryId);
   $('categoryChips').innerHTML = renderCategoryChips();
   $('doneWindowChips').innerHTML = renderDoneWindowChips();
+  root.querySelectorAll('.filter-btn').forEach(b => b.classList.toggle('active', b.dataset.filter === filter));
   // The quiet "back up soon" dot on the settings gear (see js/settings.js).
   root.querySelector('.settings-btn').classList.toggle('backup-due', isBackupDue());
 
@@ -231,7 +234,7 @@ function renderTaskRow(task, number) {
 
 function renderTitleGroup() {
   if (currentCategoryId === null) {
-    return `<h1 class="app-title">Tasks v25</h1>`;
+    return `<h1 class="app-title">Tasks v26</h1>`;
   }
   const cat   = categories.find(c => c.id === currentCategoryId);
   const name  = cat ? escHtml(cat.name) : 'Category';

@@ -269,6 +269,31 @@ test('collapseDoneSeries keeps only the latest completed instance per series', (
   assert.deepEqual(app.collapseDoneSeries(list).map(t => t.id), [2, 3, 4]);
 });
 
+// ── Remembered view ────────────────────────────────────────────────────
+test('the status filter and Done time window survive a relaunch, and junk is ignored', () => {
+  const first = loadApp(NOW);
+  first.app.setFilter('done');
+  first.app.setDoneWindow('week');
+  const saved = first.run("localStorage.getItem('todo_view_v1')");
+
+  const relaunched = loadApp(NOW);
+  relaunched.run(`localStorage.setItem('todo_view_v1', ${JSON.stringify(saved)})`);
+  relaunched.app.loadView();
+  assert.equal(relaunched.run('filter'), 'done');
+  assert.equal(relaunched.run('doneWindow'), 'week');
+
+  const junk = loadApp(NOW);
+  junk.run(`localStorage.setItem('todo_view_v1', '{"filter":"bogus","doneWindow":42}')`);
+  junk.app.loadView();
+  assert.equal(junk.run('filter'), 'all');
+  assert.equal(junk.run('doneWindow'), 'all');
+
+  const broken = loadApp(NOW);
+  broken.run(`localStorage.setItem('todo_view_v1', 'not json')`);
+  broken.app.loadView();
+  assert.equal(broken.run('filter'), 'all');
+});
+
 // ── Reordering ─────────────────────────────────────────────────────────
 test('commitReorder moves within the visible subset, others stay put', () => {
   const { app, setTasks, getTasks } = loadApp(NOW);

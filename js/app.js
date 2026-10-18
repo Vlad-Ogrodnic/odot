@@ -31,4 +31,5 @@ load();
 loadCategories();
 loadSettings();
 loadLastBackup();
+loadView();
 render();

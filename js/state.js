@@ -40,6 +40,14 @@ let settings = { ...DEFAULT_SETTINGS };
 const LAST_BACKUP_KEY = 'todo_last_backup_v1';
 let lastBackupAt = null;
 
+// The status filter (All/Active/Done) and Done's time window, remembered
+// across launches — reopening the app used to always reset to All, which
+// the user found annoying. Validated on load: a stored value from some
+// other build must never leave the list filtering by nothing.
+const VIEW_KEY       = 'todo_view_v1';
+const FILTERS        = ['all', 'active', 'done'];
+const DONE_WINDOWS   = ['today', 'week', 'month', 'all'];
+
 // ── Persistence ────────────────────────────────────────────────────────
 function load() {
   try {
@@ -100,6 +108,24 @@ function loadLastBackup() {
 function saveLastBackup() {
   try {
     localStorage.setItem(LAST_BACKUP_KEY, lastBackupAt);
+  } catch (e) {
+    console.warn('Storage write failed:', e);
+  }
+}
+
+function loadView() {
+  try {
+    const view = JSON.parse(localStorage.getItem(VIEW_KEY) || '{}');
+    if (FILTERS.includes(view.filter))          filter     = view.filter;
+    if (DONE_WINDOWS.includes(view.doneWindow)) doneWindow = view.doneWindow;
+  } catch {
+    // Unreadable: keep the defaults (All, All time).
+  }
+}
+
+function saveView() {
+  try {
+    localStorage.setItem(VIEW_KEY, JSON.stringify({ filter, doneWindow }));
   } catch (e) {
     console.warn('Storage write failed:', e);
   }
